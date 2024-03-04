@@ -4,8 +4,6 @@ from pydantic.dataclasses import dataclass
 import abc
 import typing
 
-from argon.op import Op
-
 C = typing.TypeVar("C")
 A = typing.TypeVar("A")
 C_co = typing.TypeVar("C_co")
@@ -34,7 +32,6 @@ def _compute_exptype_helper(
 ):
     for base in cls.__orig_bases__:
         origin = typing.get_origin(base) or base
-        print("Origin:", origin)
         match origin:
             case _ if origin is ExpType:
                 # Since we've reached ExpType, then we should be able to resolve all the params.
@@ -77,7 +74,6 @@ class ExpType[C_co, A](abc.ABC):
 
     @classmethod
     def _compute_LR(cls):
-        print("Cls", repr(cls), cls)
         if cls._cached_lr:
             return
         cls._cached_lr = _compute_exptype(cls, {cls.__name__: cls})
@@ -94,6 +90,23 @@ class ExpType[C_co, A](abc.ABC):
         assert cls._cached_lr is not None
         return cls._cached_lr[1]
 
+    @classmethod
+    @abc.abstractmethod
+    def fresh(cls) -> A:
+        raise NotImplementedError()
+
+    @classmethod
+    def _new(cls, d: "Def[C_co, A]") -> A:
+        right_type = cls.R()
+        assert issubclass(right_type, Ref)
+        empty_val = right_type.fresh()
+        empty_val.rhs = d
+        return empty_val
+
+    @classmethod
+    def const(cls, c: C_co) -> A:
+        return cls._new(Def(Const(c)))
+
 
 @dataclass
 class Bound[A]:
@@ -102,9 +115,10 @@ class Bound[A]:
 
 
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
-class Operation[A]:
-    underlying: Op[A]
-    def_type: typing.Literal["Op"] = "Op"
+class Node[A]:
+    id: int
+    underlying: "Op[A]"
+    def_type: typing.Literal["Node"] = "Node"
 
 
 @dataclass
@@ -115,7 +129,7 @@ class Const[C_co]:
 
 @dataclass
 class Def[C, A]:
-    val: typing.Union[Const[C], Bound[A], Operation[A]] = pydantic.Field(
+    val: typing.Union[Const[C], Bound[A], Node[A]] = pydantic.Field(
         discriminator="def_type"
     )
 
@@ -123,19 +137,70 @@ class Def[C, A]:
 class Exp[C_co, A_co](abc.ABC):
     """Exp[C, A] defines an expression with denotational type C, and staged type A."""
 
+    rhs: typing.Optional[Def[C_co, A_co]] = None
+
     @abc.abstractproperty
     def tp(self) -> ExpType[C_co, A_co]:
         raise NotImplementedError()
 
-    @abc.abstractproperty
-    def rhs(self) -> Def[C_co, A_co]:
-        raise NotImplementedError()
-
 
 class Ref[C_co, A_co](ExpType[C_co, A_co], Exp[C_co, A_co]):
-    
+
     @property
     @typing.override
     def tp(self) -> ExpType[C_co, A_co]:
         return self
 
+
+S_co = typing.TypeVar("S_co", covariant=True)
+type Sym[S_co] = Exp[typing.Any, S_co]
+
+type Type[S] = ExpType[typing.Any, S]
+
+
+def _compute_optype_helper(
+    cls: typing.Type,
+    resolutions: typing.Dict[str, typing.Type],
+    options: typing.Set[typing.Type],
+):
+    for base in cls.__orig_bases__:
+        origin = typing.get_origin(base) or base
+        match origin:
+            case _ if origin is Op:
+                options.add(_resolve_class(typing.get_args(base)[0], resolutions))
+            case _ if not issubclass(origin, ExpType):
+                continue
+
+            # The base is generic, so we should dissect it a bit.
+            case _:
+                typenames = (tparam.__name__ for tparam in origin.__type_params__)
+                new_resolutions = resolutions | dict(
+                    zip(typenames, typing.get_args(base))
+                )
+                _compute_optype_helper(origin, new_resolutions, options)
+
+
+def _compute_optype(
+    cls: typing.Type, resolutions: typing.Dict[str, typing.Type]
+) -> typing.Type:
+    options = set()
+    _compute_optype_helper(cls, resolutions, options)
+    if len(options) != 1:
+        raise TypeError(f"Failed to unify R types on {cls}: {options}")
+    return options.pop()
+
+
+class Op[A](abc.ABC):
+    _tp_cache: typing.ClassVar[typing.Optional[typing.Type]] = None
+
+    @classmethod
+    def R(cls) -> typing.Type[A]:
+        if cls._tp_cache:
+            return cls._tp_cache
+        cls._tp_cache = _compute_optype(cls, {cls.__name__: cls})
+        assert cls._tp_cache is not None
+        return cls._tp_cache
+
+    @abc.abstractproperty
+    def inputs(self) -> typing.List[Sym[typing.Any]]:
+        raise NotImplementedError()

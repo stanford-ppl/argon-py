@@ -1,12 +1,12 @@
 
 import typing
 from argon.ref import ExpType
-from argon.types import IntType
+from argon.types.integer import Integer
 
 
 def test_inttype():
-    assert IntType.L() is int
-    assert IntType.R() is IntType
+    assert Integer.L() is int
+    assert Integer.R() is Integer
 
 
 T = typing.TypeVar("T")
