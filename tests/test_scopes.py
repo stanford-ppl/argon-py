@@ -1,4 +1,3 @@
-
 from argon.state import State
 from argon.types.integer import Integer
 
@@ -12,4 +11,3 @@ def test_scope():
         print(c, c.rhs)
         d = c + b
         print(d, d.rhs)
-    

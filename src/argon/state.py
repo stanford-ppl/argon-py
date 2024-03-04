@@ -8,6 +8,7 @@ import argon
 from argon.ref import Op, Sym
 import argon.ref as ref
 
+
 @dataclass
 class State:
     _id: int = -1
@@ -19,19 +20,26 @@ class State:
 
     def new_scope(self) -> "StateScope":
         return StateScope(state=self, scope=Scope(parent=self.scope))
-    
+
     def stage[R](self, op: Op[R]) -> R:
         return self.register(op, lambda: self._symbol(op.R(), op), lambda sym: None)  # type: ignore
-    
-    def register[R](self, op: Op[R], symbol: typing.Callable[[], R], flow: typing.Callable[[Sym[R]], None]) -> R:
+
+    def register[
+        R
+    ](
+        self,
+        op: Op[R],
+        symbol: typing.Callable[[], R],
+        flow: typing.Callable[[Sym[R]], None],
+    ) -> R:
         lhs = symbol()
         sym = typing.cast(Sym[R], op.R())
         flow(sym)
         return lhs
 
-
     def _symbol[A](self, tp: ref.Type[A], op: Op[A]) -> A:
         return tp._new(ref.Def(ref.Node(self.next_id(), op)))
+
 
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
 class Scope:
@@ -59,6 +67,8 @@ class StateScope:
 
 
 _state: ContextVar[State] = ContextVar("state")
+
+
 def get_current_state() -> State:
     if current := _state.get(None):
         return current

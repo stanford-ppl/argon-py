@@ -4,24 +4,13 @@ from pydantic.dataclasses import dataclass
 import abc
 import typing
 
+from argon.utils import resolve_class
+
+
 C = typing.TypeVar("C")
 A = typing.TypeVar("A")
 C_co = typing.TypeVar("C_co")
 A_co = typing.TypeVar("A_co")
-
-
-def _resolve_class(cls, resolutions) -> typing.Type:
-    match cls:
-        case typing.ForwardRef():
-            if result := cls._evaluate(globals(), resolutions, frozenset()):
-                return typing.cast(typing.Type, result)
-            raise TypeError(
-                f"Failed to resolve forward reference: {cls} with resolutions {resolutions}"
-            )
-        case typing.TypeVar() if cls.__name__ in resolutions:
-            return _resolve_class(resolutions[cls.__name__], resolutions)
-        case _:
-            return cls
 
 
 def _compute_exptype_helper(
@@ -36,8 +25,7 @@ def _compute_exptype_helper(
             case _ if origin is ExpType:
                 # Since we've reached ExpType, then we should be able to resolve all the params.
                 [lopt, ropt] = [
-                    _resolve_class(klass, resolutions)
-                    for klass in typing.get_args(base)
+                    resolve_class(klass, resolutions) for klass in typing.get_args(base)
                 ]
                 l_options.add(lopt)
                 r_options.add(ropt)
@@ -157,50 +145,4 @@ type Sym[S_co] = Exp[typing.Any, S_co]
 
 type Type[S] = ExpType[typing.Any, S]
 
-
-def _compute_optype_helper(
-    cls: typing.Type,
-    resolutions: typing.Dict[str, typing.Type],
-    options: typing.Set[typing.Type],
-):
-    for base in cls.__orig_bases__:
-        origin = typing.get_origin(base) or base
-        match origin:
-            case _ if origin is Op:
-                options.add(_resolve_class(typing.get_args(base)[0], resolutions))
-            case _ if not issubclass(origin, ExpType):
-                continue
-
-            # The base is generic, so we should dissect it a bit.
-            case _:
-                typenames = (tparam.__name__ for tparam in origin.__type_params__)
-                new_resolutions = resolutions | dict(
-                    zip(typenames, typing.get_args(base))
-                )
-                _compute_optype_helper(origin, new_resolutions, options)
-
-
-def _compute_optype(
-    cls: typing.Type, resolutions: typing.Dict[str, typing.Type]
-) -> typing.Type:
-    options = set()
-    _compute_optype_helper(cls, resolutions, options)
-    if len(options) != 1:
-        raise TypeError(f"Failed to unify R types on {cls}: {options}")
-    return options.pop()
-
-
-class Op[A](abc.ABC):
-    _tp_cache: typing.ClassVar[typing.Optional[typing.Type]] = None
-
-    @classmethod
-    def R(cls) -> typing.Type[A]:
-        if cls._tp_cache:
-            return cls._tp_cache
-        cls._tp_cache = _compute_optype(cls, {cls.__name__: cls})
-        assert cls._tp_cache is not None
-        return cls._tp_cache
-
-    @abc.abstractproperty
-    def inputs(self) -> typing.List[Sym[typing.Any]]:
-        raise NotImplementedError()
+from argon.op import Op
