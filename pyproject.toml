@@ -1,0 +1,7 @@
+[project]
+name = "argon"
+version = "0.0.1"
+
+dependencies = [
+    "pydantic"
+]
