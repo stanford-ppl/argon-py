@@ -1,5 +1,4 @@
 import inspect
-import typing
 import dis
 from pydantic.dataclasses import dataclass
 

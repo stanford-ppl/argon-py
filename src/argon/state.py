@@ -3,7 +3,6 @@ import typing
 
 import pydantic
 from pydantic.dataclasses import dataclass
-import argon
 
 from argon.ref import Op, Sym
 import argon.ref as ref
