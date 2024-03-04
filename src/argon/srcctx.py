@@ -20,6 +20,3 @@ class SrcCtx:
         frame = inspect.stack()[depth]
         return SrcCtx(frame.filename, frame.positions)
 
-def test():
-    ctx = SrcCtx.new()
-    return ctx

@@ -15,7 +15,11 @@ A_co = typing.TypeVar("A_co")
 def _resolve_class(cls, resolutions) -> typing.Type:
     match cls:
         case typing.ForwardRef():
-            return cls._evaluate(globals(), resolutions, frozenset())
+            if result := cls._evaluate(globals(), resolutions, frozenset()):
+                return typing.cast(typing.Type, result)
+            raise TypeError(
+                f"Failed to resolve forward reference: {cls} with resolutions {resolutions}"
+            )
         case typing.TypeVar() if cls.__name__ in resolutions:
             return _resolve_class(resolutions[cls.__name__], resolutions)
         case _:
@@ -68,7 +72,7 @@ def _compute_exptype(
 
 class ExpType[C_co, A](abc.ABC):
     _cached_lr: typing.ClassVar[
-        typing.Optional[typing.Tuple[typing.Type, typing.Tuple]]
+        typing.Optional[typing.Tuple[typing.Type, typing.Type]]
     ] = None
 
     @classmethod
@@ -81,11 +85,13 @@ class ExpType[C_co, A](abc.ABC):
     @classmethod
     def L(cls) -> typing.Type[C_co]:
         cls._compute_LR()
+        assert cls._cached_lr is not None
         return cls._cached_lr[0]
 
     @classmethod
     def R(cls) -> typing.Type[A]:
         cls._compute_LR()
+        assert cls._cached_lr is not None
         return cls._cached_lr[1]
 
 
@@ -127,4 +133,9 @@ class Exp[C_co, A_co](abc.ABC):
 
 
 class Ref[C_co, A_co](ExpType[C_co, A_co], Exp[C_co, A_co]):
-    pass
+    
+    @property
+    @typing.override
+    def tp(self) -> ExpType[C_co, A_co]:
+        return self
+
