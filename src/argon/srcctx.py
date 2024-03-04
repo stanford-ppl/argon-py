@@ -3,7 +3,7 @@ import typing
 import dis
 from pydantic.dataclasses import dataclass
 
-@dataclass(unsafe_hash=True, frozen=True)
+@dataclass(unsafe_hash=True, frozen=True, slots=True)
 class SrcCtx:
     file: str
     positions: dis.Positions | None
