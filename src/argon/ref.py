@@ -3,6 +3,7 @@ from pydantic.dataclasses import dataclass
 
 import abc
 import typing
+from argon.srcctx import SrcCtx
 
 from argon.utils import compute_types, resolve_class
 
@@ -42,16 +43,17 @@ class ExpType[C_co, A](abc.ABC):
         raise NotImplementedError()
 
     @classmethod
-    def _new(cls, d: "Def[C_co, A]") -> A:
+    def _new(cls, d: "Def[C_co, A]", ctx: SrcCtx) -> A:
         right_type = cls.R()
         assert issubclass(right_type, Ref)
         empty_val = right_type.fresh()
         empty_val.rhs = d
+        empty_val.ctx = ctx
         return empty_val
 
     @classmethod
     def const(cls, c: C_co) -> A:
-        return cls._new(Def(Const(c)))
+        return cls._new(Def(Const(c)), SrcCtx.new(2))
 
 
 @dataclass
@@ -80,12 +82,15 @@ class Def[C, A]:
     )
 
 
+@dataclass
 class Exp[C_co, A_co](abc.ABC):
     """Exp[C, A] defines an expression with denotational type C, and staged type A."""
 
     rhs: typing.Optional[Def[C_co, A_co]] = None
+    ctx: typing.Optional[SrcCtx] = None
 
-    @abc.abstractproperty
+    @property
+    @abc.abstractmethod
     def tp(self) -> ExpType[C_co, A_co]:
         raise NotImplementedError()
 
@@ -101,6 +106,6 @@ class Ref[C_co, A_co](ExpType[C_co, A_co], Exp[C_co, A_co]):
 S_co = typing.TypeVar("S_co", covariant=True)
 type Sym[S_co] = Exp[typing.Any, S_co]
 
-type Type[S] = ExpType[typing.Any, S]
+type Type[A] = ExpType[typing.Any, A]
 
 from argon.op import Op
