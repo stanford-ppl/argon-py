@@ -76,8 +76,13 @@ class Const[C_co]:
 
 
 @dataclass
-class Def[C, A]:
-    val: typing.Union[Const[C], Bound[A], Node[A]] = pydantic.Field(
+class TypeRef:
+    def_type: typing.Literal["TypeRef"] = "TypeRef"
+
+
+@dataclass
+class Def[C_co, A_co]:
+    val: typing.Union[Const[C_co], Bound[A_co], Node[A_co], TypeRef] = pydantic.Field(
         discriminator="def_type"
     )
 
