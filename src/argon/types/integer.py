@@ -13,4 +13,4 @@ class Integer(Ref[int, "Integer"]):
     def __add__(self, other: "Integer") -> "Integer":
         import argon.node.arith as arith
 
-        return stage(arith.IntegerAdd(self, other, ctx=SrcCtx.new(2)))
+        return stage(arith.Add[Integer](self, other, ctx=SrcCtx.new(2)))

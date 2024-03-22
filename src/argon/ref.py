@@ -5,7 +5,7 @@ import abc
 import typing
 from argon.srcctx import SrcCtx
 
-from argon.utils import compute_types, resolve_class
+from argon.utils import compute_types
 
 
 C = typing.TypeVar("C")

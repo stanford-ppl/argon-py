@@ -19,7 +19,7 @@ def resolve_class(cls, resolutions) -> typing.Type:
 def _type_helper(
     cls: typing.Type,
     target: typing.Type,
-    resolutions: typing.Dict[str, typing.Type],
+    resolutions: dict[str, typing.Type],
     options: typing.MutableMapping[str, typing.Set[typing.Type]],
 ):
     for base in cls.__orig_bases__:
@@ -62,7 +62,7 @@ def _unify_types(
 
 
 def compute_types(
-    cls: typing.Type, target: typing.Type, resolutions: typing.Dict[str, typing.Type]
+    cls: typing.Type, target: typing.Type, resolutions: dict[str, typing.Type]
 ) -> typing.Mapping[str, typing.Type]:
     options = collections.defaultdict(set)
     _type_helper(cls, target, resolutions, options)
