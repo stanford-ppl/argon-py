@@ -15,8 +15,8 @@ U = typing.TypeVar("U")
 
 class IType[U](GType[U]):
     @typing.override
-    def fresh(self):
-        return IType[self.U]()
+    def fresh(self) -> U:
+        return IType[self.U]()  # type: ignore
 
 
 def test_generic_type():

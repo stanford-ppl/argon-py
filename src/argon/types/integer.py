@@ -6,8 +6,7 @@ from argon.state import stage
 
 class Integer(Ref[int, "Integer"]):
     @override
-    @classmethod
-    def fresh(cls) -> "Integer":
+    def fresh(self) -> "Integer":
         return Integer()
 
     def __add__(self, other: "Integer") -> "Integer":

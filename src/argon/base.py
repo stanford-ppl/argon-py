@@ -51,14 +51,14 @@ class ArgonMeta:
                     match arg:
                         case typing.TypeVar():
 
-                            def accessor_override(self, arg=arg):
+                            def accessor_override(self, arg=arg):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs
                                 if hasattr(self, arg.__name__):
                                     return getattr(self, arg.__name__)
                                 raise ArgonError(f"No arg named {arg}")
 
                         case typing.ForwardRef():
 
-                            def accessor_override(self, arg=arg):
+                            def accessor_override(self, arg=arg):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs
                                 retval = arg._evaluate(globalns, localns, frozenset())
                                 if isinstance(retval, typing.TypeVar):
                                     return getattr(self, retval.__name__)
@@ -66,7 +66,7 @@ class ArgonMeta:
 
                         case type():
 
-                            def accessor_override(self, arg=arg, param=param):
+                            def accessor_override(self, arg=arg, param=param):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs
                                 # print(f"Retrieving {param} = {arg}")
                                 return arg
 

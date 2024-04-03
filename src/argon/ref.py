@@ -19,15 +19,27 @@ class ExpType[C, A](ArgonMeta, abc.ABC):
         raise NotImplementedError()
 
     def _new(self, d: "Def[C, A]", ctx: SrcCtx) -> A:
-        right_type = self.A
-        assert issubclass(right_type, Ref)
-        empty_val = right_type.fresh()
+        right_type = typing.cast(type, self.A)
+        empty_val: Ref = typing.cast(Ref, right_type().fresh())
         empty_val.rhs = d
         empty_val.ctx = ctx
-        return empty_val
+        return typing.cast(A, empty_val)
 
     def const(self, c: C) -> A:
         return self._new(Def(Const(c)), SrcCtx.new(2))
+
+    @abc.abstractproperty
+    def A(self) -> typing.Type[A]:
+        raise NotImplementedError()
+
+    @abc.abstractproperty
+    def C(self) -> typing.Type[C]:
+        raise NotImplementedError()
+
+    # A shim method that silences typing errors as something like Integer() or tp()
+    # is used to instantiate a type.
+    def __call__(self, *args: typing.Any, **kwds: typing.Any) -> typing.Any:
+        raise NotImplementedError()
 
 
 @dataclass
