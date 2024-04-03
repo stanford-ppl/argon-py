@@ -3,6 +3,7 @@ from pydantic.dataclasses import dataclass
 
 import abc
 import typing
+from argon.base import ArgonMeta
 from argon.srcctx import SrcCtx
 
 from argon.utils import compute_types
@@ -10,50 +11,23 @@ from argon.utils import compute_types
 
 C = typing.TypeVar("C")
 A = typing.TypeVar("A")
-C_co = typing.TypeVar("C_co")
-A_co = typing.TypeVar("A_co")
 
 
-class ExpType[C_co, A](abc.ABC):
-    _cached_lr: typing.ClassVar[typing.Optional[typing.Mapping[str, typing.Type]]] = (
-        None
-    )
-
-    @classmethod
-    def _compute_LR(cls):
-        if cls._cached_lr:
-            return
-        cls._cached_lr = compute_types(cls, ExpType, {cls.__name__: cls})
-
-    @classmethod
-    def L(cls) -> typing.Type[C_co]:
-        cls._compute_LR()
-        assert cls._cached_lr is not None
-        return cls._cached_lr["C_co"]
-
-    @classmethod
-    def R(cls) -> typing.Type[A]:
-        cls._compute_LR()
-        assert cls._cached_lr is not None
-        return cls._cached_lr["A"]
-
-    @classmethod
+class ExpType[C, A](ArgonMeta, abc.ABC):
     @abc.abstractmethod
-    def fresh(cls) -> A:
+    def fresh(self) -> A:
         raise NotImplementedError()
 
-    @classmethod
-    def _new(cls, d: "Def[C_co, A]", ctx: SrcCtx) -> A:
-        right_type = cls.R()
+    def _new(self, d: "Def[C, A]", ctx: SrcCtx) -> A:
+        right_type = self.A
         assert issubclass(right_type, Ref)
         empty_val = right_type.fresh()
         empty_val.rhs = d
         empty_val.ctx = ctx
         return empty_val
 
-    @classmethod
-    def const(cls, c: C_co) -> A:
-        return cls._new(Def(Const(c)), SrcCtx.new(2))
+    def const(self, c: C) -> A:
+        return self._new(Def(Const(c)), SrcCtx.new(2))
 
 
 @dataclass
@@ -70,8 +44,8 @@ class Node[A]:
 
 
 @dataclass
-class Const[C_co]:
-    value: C_co
+class Const[C]:
+    value: C
     def_type: typing.Literal["Const"] = "Const"
 
 
@@ -81,30 +55,30 @@ class TypeRef:
 
 
 @dataclass
-class Def[C_co, A_co]:
-    val: typing.Union[Const[C_co], Bound[A_co], Node[A_co], TypeRef] = pydantic.Field(
+class Def[C, A]:
+    val: typing.Union[Const[C], Bound[A], Node[A], TypeRef] = pydantic.Field(
         discriminator="def_type"
     )
 
 
 @dataclass
-class Exp[C_co, A_co](abc.ABC):
+class Exp[C, A](ArgonMeta, abc.ABC):
     """Exp[C, A] defines an expression with denotational type C, and staged type A."""
 
-    rhs: typing.Optional[Def[C_co, A_co]] = None
+    rhs: typing.Optional[Def[C, A]] = None
     ctx: typing.Optional[SrcCtx] = None
 
     @property
     @abc.abstractmethod
-    def tp(self) -> ExpType[C_co, A_co]:
+    def tp(self) -> ExpType[C, A]:
         raise NotImplementedError()
 
 
-class Ref[C_co, A_co](ExpType[C_co, A_co], Exp[C_co, A_co]):
+class Ref[C, A](ExpType[C, A], Exp[C, A]):
 
     @property
     @typing.override
-    def tp(self) -> ExpType[C_co, A_co]:
+    def tp(self) -> ExpType[C, A]:
         return self
 
 

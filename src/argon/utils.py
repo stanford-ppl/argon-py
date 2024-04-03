@@ -1,5 +1,12 @@
 import collections
+import types
 import typing
+
+
+def orig_class(obj) -> types.GenericAlias:
+    if not hasattr(obj, "__orig_class__"):
+        raise TypeError(f"Object {obj} was not defined generically!")
+    return obj.__orig_class__  # type: ignore
 
 
 def resolve_class(cls, resolutions) -> typing.Type:

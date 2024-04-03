@@ -34,7 +34,7 @@ class State:
 
     def stage[R](self, op: Op[R], ctx: SrcCtx | None = None) -> R:
         ctx = ctx or SrcCtx.new(2)
-        return self.register(op, lambda: self._symbol(op.R(), op, ctx), lambda sym: None)  # type: ignore
+        return self.register(op, lambda: self._symbol(op.R, op, ctx), lambda sym: None)  # type: ignore
 
     def register[
         R
@@ -52,7 +52,7 @@ class State:
         return lhs
 
     def _symbol[A](self, tp: ref.Type[A], op: Op[A], ctx: SrcCtx) -> A:
-        return tp._new(ref.Def(ref.Node(self.next_id(), op)), ctx)
+        return tp()._new(ref.Def(ref.Node(self.next_id(), op)), ctx)
 
     prev_state: typing.Optional["State"] = None
 
