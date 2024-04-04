@@ -78,30 +78,3 @@ class ArgonMeta:
                     setattr(cls, param.__name__, property(fget=accessor_override))
 
         return super_init
-
-
-class TestMeta[T](ArgonMeta):
-    pass
-
-
-class TestConcrete(TestMeta[int]):
-    pass
-
-
-class TestMeta2[U](TestMeta[U]):
-    pass
-
-
-class TestConcrete2(TestMeta2[int]):
-    pass
-
-
-class TestRecursive(TestMeta["TestRecursive"]):
-    pass
-
-
-F = typing.TypeVar("F")
-
-
-class TestRecursive2[F](TestMeta["TestRecursive2[F]"]):
-    pass

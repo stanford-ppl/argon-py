@@ -1,4 +1,5 @@
 import typing
+from argon.base import ArgonMeta
 from argon.ref import ExpType
 from argon.types.integer import Integer
 
@@ -21,6 +22,36 @@ class IType[U](GType[U]):
 
 def test_generic_type():
     tp_instance = IType[str]()
-    # print(tp_instance.C, tp_instance.A)
     assert tp_instance.A is str
     assert tp_instance.C is int
+
+
+class TestMeta[T](ArgonMeta):
+    pass
+
+
+class TestConcrete(TestMeta[int]):
+    pass
+
+
+class TestRecursive(TestMeta["TestRecursive"]):
+    pass
+
+
+F = typing.TypeVar("F")
+
+
+class TestRecursive2[F](TestMeta["TestRecursive2[F]"]):
+    pass
+
+
+def test_concretized():
+    assert TestConcrete().T is int  # type: ignore
+
+
+def test_recursive():
+    assert TestRecursive().T is TestRecursive  # type: ignore
+
+
+def test_recursive_generic():
+    assert TestRecursive2[int]().F is int  # type: ignore

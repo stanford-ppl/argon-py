@@ -28,6 +28,7 @@ class ExpType[C, A](ArgonMeta, abc.ABC):
     def const(self, c: C) -> A:
         return self._new(Def(Const(c)), SrcCtx.new(2))
 
+    # A, C shims are used to silence typing errors -- their actual definitions are provided by ArgonMeta
     @abc.abstractproperty
     def A(self) -> typing.Type[A]:
         raise NotImplementedError()
