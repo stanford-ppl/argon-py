@@ -20,13 +20,14 @@ class ArgonMeta:
         # Have to register ourselves too!
         localns[cls.__name__] = cls
 
+        # TODO: Make sure that this is actually correct
         super_init = super().__init_subclass__()
 
         # To handle generic type parameters, we should look them up dynamically at runtime
         for ind, tparam in enumerate(cls.__type_params__):
             param_name = tparam.__name__
 
-            def accessor_tparam(self):
+            def accessor_tparam(self, ind=ind):
                 # print(f"Reading {self}.{param_name}")
                 if not hasattr(self, "__orig_class__"):
                     raise TypeError(
