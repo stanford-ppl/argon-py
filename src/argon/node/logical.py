@@ -14,6 +14,7 @@ class Not[T](Op[T]):
     @typing.override
     def inputs(self) -> typing.List[Sym[typing.Any]]:
         return [self.a] # type: ignore
+ 
 
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
 class And[T](Op[T]):
@@ -24,6 +25,7 @@ class And[T](Op[T]):
     @typing.override
     def inputs(self) -> typing.List[Sym[typing.Any]]:
         return [self.a, self.b]  # type: ignore
+ 
 
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
 class Or[T](Op[T]):
@@ -35,6 +37,7 @@ class Or[T](Op[T]):
     def inputs(self) -> typing.List[Sym[typing.Any]]:
         return [self.a, self.b]  # type: ignore
 
+
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
 class Xor[T](Op[T]):
     a: T
@@ -44,3 +47,4 @@ class Xor[T](Op[T]):
     @typing.override
     def inputs(self) -> typing.List[Sym[typing.Any]]:
         return [self.a, self.b] # type: ignore
+    

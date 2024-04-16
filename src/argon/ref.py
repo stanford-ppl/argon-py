@@ -48,6 +48,12 @@ class Bound[A]:
     id: int
     def_type: typing.Literal["Bound"] = "Bound"
 
+    def dump(self) -> str:
+        return str(self)
+
+    def __str__(self) -> str:
+        return f"Bound({self.id})"
+
 
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
 class Node[A]:
@@ -55,16 +61,34 @@ class Node[A]:
     underlying: "Op[A]"
     def_type: typing.Literal["Node"] = "Node"
 
+    def dump(self) -> str:
+        return f"x{self.id} = {self.underlying}"
+    
+    def __str__(self) -> str:
+        return f"x{self.id}"
+
 
 @dataclass
 class Const[C]:
     value: C
     def_type: typing.Literal["Const"] = "Const"
 
+    def dump(self) -> str:
+        return str(self)
+    
+    def __str__(self) -> str:
+        return f"Const({self.value})"
+
 
 @dataclass
 class TypeRef:
     def_type: typing.Literal["TypeRef"] = "TypeRef"
+
+    def dump(self) -> str:
+        return str(self)
+
+    def __str__(self) -> str:
+        return "TypeRef()"
 
 
 @dataclass
@@ -72,6 +96,12 @@ class Def[C, A]:
     val: typing.Union[Const[C], Bound[A], Node[A], TypeRef] = pydantic.Field(
         discriminator="def_type"
     )
+
+    def dump(self) -> str:
+        return self.val.dump()
+    
+    def __str__(self) -> str:
+        return str(self.val)
 
 
 @dataclass
@@ -85,6 +115,20 @@ class Exp[C, A](ArgonMeta, abc.ABC):
     @abc.abstractmethod
     def tp(self) -> ExpType[C, A]:
         raise NotImplementedError()
+    
+    def dump(self, indent_level = 0) -> str:
+        no_indent = '|   ' * indent_level
+        indent = '|   ' * (indent_level + 1)
+        rhs_str = "None" if self.rhs is None else self.rhs.dump()
+        return (
+            f"{rhs_str}( \n"
+                f"{indent}tp: {self.__class__.__name__} \n"
+                f"{indent}ctx: {self.ctx} \n"
+            f"{no_indent})"
+        )
+    
+    def __str__(self) -> str:
+        return str(self.rhs)
 
 
 class Ref[C, A](ExpType[C, A], Exp[C, A]):

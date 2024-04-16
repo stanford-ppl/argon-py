@@ -69,6 +69,22 @@ class State:
             _state.set(self.prev_state)
         self.prev_state = None
 
+    def dump(self, indent_level = 0) -> str:
+        no_indent = '|   ' * indent_level
+        indent = '|   ' * (indent_level + 1)
+        scope_str = "None" if self.scope is None else self.scope.dump(indent_level + 1)
+        prev_state_str = "None" if self.prev_state is None else self.prev_state.dump(indent_level + 1)
+        return (
+            f"\n"
+            f"State( \n"
+                f"{indent}scope={scope_str}, \n"
+                f"{indent}prev_state={prev_state_str} \n"
+            f"{no_indent})"
+        )
+    
+    def __str__(self) -> str:
+        return self.dump()
+
 
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True), repr=True)
 class Scope:
@@ -80,6 +96,23 @@ class Scope:
     cache: typing.MutableMapping[Op[typing.Any], Exp[typing.Any, typing.Any]] = (
         pydantic.Field(default_factory=dict)
     )
+    def dump(self, indent_level = 0) -> str:
+        no_indent = '|   ' * indent_level
+        indent = '|   ' * (indent_level + 1)
+        more_indent = '|   ' * (indent_level + 2)
+        parent_str = "None" if self.parent is None else self.parent.dump(indent_level + 1)
+        if self.symbols:
+            symbols_str = ', \n'.join(f"{more_indent}{symbol.dump(indent_level + 2)}" for symbol in self.symbols)
+            symbols_str = f"[\n{symbols_str}\n{indent}]"
+        else:
+            symbols_str = "[]"
+        return (
+            f"Scope( \n"
+                f"{indent}parent={parent_str}, \n"
+                f"{indent}symbols={symbols_str}, \n"
+                f"{indent}cache={self.cache} \n"
+            f"{no_indent})"
+        )
 
 
 @dataclass

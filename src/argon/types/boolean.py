@@ -11,14 +11,14 @@ class Boolean(Ref[bool, "Boolean"]):
         return Boolean()
     
     def __invert__(self) -> "Boolean":
-        return stage(logical.Not[Boolean](self, ctx=SrcCtx.new(2)))
+        return stage(logical.Not[Boolean](self), ctx=SrcCtx.new(2))
     
     def __and__(self, other: "Boolean") -> "Boolean":
-        return stage(logical.And[Boolean](self, other, ctx=SrcCtx.new(2)))
+        return stage(logical.And[Boolean](self, other), ctx=SrcCtx.new(2))
 
     def __or__(self, other: "Boolean") -> "Boolean":
-        return stage(logical.Or[Boolean](self, other, ctx=SrcCtx.new(2)))
+        return stage(logical.Or[Boolean](self, other), ctx=SrcCtx.new(2))
     
     def __xor__(self, other: "Boolean") -> "Boolean":
-        return stage(logical.Xor[Boolean](self, other, ctx=SrcCtx.new(2)))
+        return stage(logical.Xor[Boolean](self, other), ctx=SrcCtx.new(2))
         

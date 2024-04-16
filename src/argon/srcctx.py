@@ -19,3 +19,9 @@ class SrcCtx:
         """
         frame = inspect.stack()[depth]
         return SrcCtx(frame.filename, frame.positions)
+    
+    def __str__(self) -> str:
+        # Need a space character before self.file for VSCode to recognize the file path
+        if self.positions is None:
+            return f' {self.file}'
+        return f'{self.file}:{self.positions.lineno}:{self.positions.col_offset}'
