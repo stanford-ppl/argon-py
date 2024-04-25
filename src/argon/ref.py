@@ -41,6 +41,10 @@ class ExpType[C, A](ArgonMeta, abc.ABC):
     # is used to instantiate a type.
     def __call__(self, *args: typing.Any, **kwds: typing.Any) -> typing.Any:
         raise NotImplementedError()
+    
+    @property
+    def tp_name(self) -> str:
+        return self.__class__.__name__
 
 
 @dataclass
@@ -122,7 +126,7 @@ class Exp[C, A](ArgonMeta, abc.ABC):
         rhs_str = "None" if self.rhs is None else self.rhs.dump()
         return (
             f"{rhs_str}( \n"
-                f"{indent}tp: {self.__class__.__name__} \n"
+                f"{indent}tp: {self.tp.tp_name} \n"
                 f"{indent}ctx: {self.ctx} \n"
             f"{no_indent})"
         )
