@@ -52,7 +52,7 @@ class Bound[A]:
     id: int
     def_type: typing.Literal["Bound"] = "Bound"
 
-    def dump(self) -> str:
+    def dump(self, indent_level = 0) -> str:
         return str(self)
 
     def __str__(self) -> str:
@@ -65,8 +65,8 @@ class Node[A]:
     underlying: "Op[A]"
     def_type: typing.Literal["Node"] = "Node"
 
-    def dump(self) -> str:
-        return f"x{self.id} = {self.underlying}"
+    def dump(self, indent_level = 0) -> str:
+        return f"x{self.id} = {self.underlying.dump(indent_level)}"
     
     def __str__(self) -> str:
         return f"x{self.id}"
@@ -77,7 +77,7 @@ class Const[C]:
     value: C
     def_type: typing.Literal["Const"] = "Const"
 
-    def dump(self) -> str:
+    def dump(self, indent_level = 0) -> str:
         return str(self)
     
     def __str__(self) -> str:
@@ -88,7 +88,7 @@ class Const[C]:
 class TypeRef:
     def_type: typing.Literal["TypeRef"] = "TypeRef"
 
-    def dump(self) -> str:
+    def dump(self, indent_level = 0) -> str:
         return str(self)
 
     def __str__(self) -> str:
@@ -101,8 +101,8 @@ class Def[C, A]:
         discriminator="def_type"
     )
 
-    def dump(self) -> str:
-        return self.val.dump()
+    def dump(self, indent_level = 0) -> str:
+        return self.val.dump(indent_level)
     
     def __str__(self) -> str:
         return str(self.val)
@@ -123,7 +123,7 @@ class Exp[C, A](ArgonMeta, abc.ABC):
     def dump(self, indent_level = 0) -> str:
         no_indent = '|   ' * indent_level
         indent = '|   ' * (indent_level + 1)
-        rhs_str = "None" if self.rhs is None else self.rhs.dump()
+        rhs_str = "None" if self.rhs is None else self.rhs.dump(indent_level)
         return (
             f"{rhs_str}( \n"
                 f"{indent}tp: {self.tp.tp_name} \n"

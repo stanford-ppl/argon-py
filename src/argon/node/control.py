@@ -4,6 +4,7 @@ import pydantic
 from pydantic.dataclasses import dataclass
 
 from argon.block import Block
+from argon.node.mux import Mux
 from argon.op import Op
 from argon.ref import Exp, Ref, Sym
 from argon.srcctx import SrcCtx
@@ -22,6 +23,29 @@ class IfThenElse[T](Op[T]):
     @typing.override
     def inputs(self) -> typing.List[Sym[typing.Any]]:
         return [self.cond] + self.thenBlk.stms + self.elseBlk.stms  # type: ignore
+    
+    @typing.override
+    def dump(self, indent_level = 0) -> str:
+        no_indent = '|   ' * indent_level
+        indent = '|   ' * (indent_level + 1)
+        return (
+            f"IfThenElse( \n"
+                f"{indent}cond = {self.cond}, \n"
+                f"{indent}thenBlk = {self.thenBlk.dump(indent_level + 1)}, \n"
+                f"{indent}elseBlk = {self.elseBlk.dump(indent_level + 1)} \n"
+            f"{no_indent})"
+        )
+
+
+def stage_mux(
+    cond: Boolean,
+    a: Exp[typing.Any, typing.Any],
+    b: Exp[typing.Any, typing.Any],
+) -> Ref[typing.Any, typing.Any]:
+    if a.tp.A != b.tp.A:
+        raise TypeError(f"Type mismatch: {a.tp.A} != {b.tp.A}")
+    return stage(Mux[a.tp.A](cond, a, b), ctx=SrcCtx.new(2)
+)
 
 
 def stage_if_exp(
@@ -245,13 +269,13 @@ except NameError:
             )
         )
 
-        # Make each assigned variable be var = stage_if_exp(cond, var_then, var_else)
+        # Make each assigned variable be var = stage(Mux(cond, then, else))
         for var in assigned_vars:
             new_body.append(
                 ast.Assign(
                     targets=[ast.Name(id=var, ctx=ast.Store())],
                     value=ast.Call(
-                        func=ast.Name(id="stage_if_exp", ctx=ast.Load()),
+                        func=ast.Name(id="stage_mux", ctx=ast.Load()),
                         args=[
                             ast.Name(id=self.generate_temp_var("cond"), ctx=ast.Load()),
                             ast.Call(
