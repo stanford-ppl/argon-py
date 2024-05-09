@@ -70,6 +70,12 @@ class ArgonMeta:
                             def accessor_override(self, arg=arg, param=param):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs
                                 # print(f"Retrieving {param} = {arg}")
                                 return arg
+                        
+                        case types.GenericAlias():
+
+                            def accessor_override(self, arg=arg, param=param):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs
+                                print(f"Retrieving {param} = {arg}")
+                                return arg
 
                         case _:
                             raise ArgonError(
