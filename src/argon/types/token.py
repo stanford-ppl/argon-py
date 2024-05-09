@@ -1,5 +1,5 @@
 from pydantic.dataclasses import dataclass
-from typing import Union, override
+from typing import Union, override, List, TypeVar
 from argon.ref import Ref
 
 @dataclass
@@ -24,8 +24,11 @@ class Token:
         return str(self.value)
 
 
-
-class Stream(Ref[list[Token], "Stream"]):
+class Stream(Ref[List[Token], "Stream"]):
     @override
     def fresh(self) -> "Stream":
         return Stream()
+    
+    # def reshape(self) -> "Stream":
+    #     import 
+
