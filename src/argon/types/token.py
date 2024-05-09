@@ -1,6 +1,8 @@
 from pydantic.dataclasses import dataclass
 from typing import Union, override, List, TypeVar
 from argon.ref import Ref
+from argon.srcctx import SrcCtx
+from argon.state import stage
 
 @dataclass
 class Stop:
@@ -29,6 +31,9 @@ class Stream(Ref[List[Token], "Stream"]):
     def fresh(self) -> "Stream":
         return Stream()
     
-    # def reshape(self) -> "Stream":
-    #     import 
+    def zip(self, other:"Stream") -> "Stream":
+        import argon.node.step as step
+
+        return stage(step.Zip[Stream](self, other), ctx=SrcCtx.new(2))
+
 
