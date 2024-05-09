@@ -1,4 +1,4 @@
-from argon.types.token import Stop, Val, Token, Stream
+from argon.types.token import Stop, fVal, fStream
 from argon.state import State
 
 
@@ -7,18 +7,10 @@ def test_stop_token():
     print(a)
     print(type(a))
 
-def test_token():
-    a = Token(Stop(1))
-    b = Token(Val(1.0))
-    print(a)
-    print(type(a))
-    print(b)
-    print(type(b))
-
 def test_fixed_tp_stream():
     state = State()
     with state:
-        a = Stream().const([Val(1.0),Val(2.0),Stop(1),Val(3.0),Val(4.0),Stop(2)])
+        a = fStream().const([fVal(1.0),fVal(2.0),Stop(1),fVal(3.0),fVal(4.0),Stop(2)])
         print(a)
         print(f"a.C = {a.C}")
         print(f"a.A = {a.A}")
@@ -26,8 +18,8 @@ def test_fixed_tp_stream():
 def test_fixed_tp_stream_zip():
     state = State()
     with state:
-        a = Stream().const([Val(1.0),Val(2.0),Stop(1),Val(3.0),Val(4.0),Stop(2)])
-        b = Stream().const([Val(1.1),Val(2.1),Stop(1),Val(3.1),Val(4.1),Stop(2)])
+        a = fStream().const([fVal(1.0),fVal(2.0),Stop(1),fVal(3.0),fVal(4.0),Stop(2)])
+        b = fStream().const([fVal(1.1),fVal(2.1),Stop(1),fVal(3.1),fVal(4.1),Stop(2)])
         c = a.zip(b)
         print(state)
     

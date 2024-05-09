@@ -12,28 +12,22 @@ class Stop:
         return f"S{self.level}"
     
 @dataclass
-class Val:
+class fVal:
     value: float
 
     def __str__(self) -> str:
         return str(self.value)
-    
-@dataclass
-class Token:
-    value: Union[Val,Stop]
-
-    def __str__(self) -> str:
-        return str(self.value)
 
 
-class Stream(Ref[List[Token], "Stream"]):
+class fStream(Ref[List[Union[fVal,Stop]], "fStream"]):
+    # Add field rank & datatype (like int as a field and the type is type())
+    # This does not appear in the types, but maybe based on how the dataclasses are compared, I cant do a == to see if they're the same?
     @override
-    def fresh(self) -> "Stream":
-        return Stream()
+    def fresh(self) -> "fStream":
+        # use self to set the corresponding fields for Stream
+        return fStream()
     
-    def zip(self, other:"Stream") -> "Stream":
+    def zip(self, other:"fStream") -> "fStream":
         import argon.node.step as step
 
-        return stage(step.Zip[Stream](self, other), ctx=SrcCtx.new(2))
-
-
+        return stage(step.Zip[fStream](self, other), ctx=SrcCtx.new(2))
