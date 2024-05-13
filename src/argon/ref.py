@@ -21,6 +21,7 @@ class ExpType[C, A](ArgonMeta, abc.ABC):
     def _new(self, d: "Def[C, A]", ctx: SrcCtx) -> A:
         right_type = typing.cast(type, self.A)
         empty_val: Ref = typing.cast(Ref, right_type().fresh())
+        print(type(right_type))
         empty_val.rhs = d
         empty_val.ctx = ctx
         return typing.cast(A, empty_val)

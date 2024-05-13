@@ -12,6 +12,7 @@ def test_scope():
         b = Integer().const(6)
         c = a + b
         d = c + b
+    print(state)
 
 def test_scope2():
     state = State()
