@@ -44,20 +44,18 @@ class ArgonMeta:
         # class Parent[T]: pass
         # class Child(Parent[int]): pass
         # When getting Child().T, it should not require __orig_class__ because it has been filled already.
-        for arg in cls.__type_params__:
-            print(f"cls = {cls}")
-            print(arg)
-            match arg:
-                case typing.TypeVar():
-                    print("This is ytpe ar")
-                case _:
-                    print("I don't know")
-
+        print("==============================")
+        print(cls)
         for base in types.get_original_bases(cls):
             print(f"Base: {base}, type(base)= {type(base)}")
             if isinstance(base, typing._GenericAlias):  # type: ignore -- We don't have a great alternative way for checking if an object is a GenericAlias
+                print(f"typing.get_origin(base)={typing.get_origin(base)}")
                 parent_params = typing.get_origin(base).__type_params__
                 parent_args = typing.get_args(base)
+                
+                print(parent_params)
+                print(parent_args)
+
                 for param, arg in zip(parent_params, parent_args):
 
                     print(param, arg, cls)
@@ -107,6 +105,5 @@ class ArgonMeta:
                             )
                     accessor_override.__name__ = param.__name__
                     setattr(cls, param.__name__, property(fget=accessor_override))
-            elif isinstance(base, typing.Generic):
-                print("generic[T]")
+        
         return super_init
