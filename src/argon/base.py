@@ -4,7 +4,6 @@ import types
 
 from argon.errors import ArgonError
 
-
 ### WARNING: This does not correctly handle shadowing of typevars -- every type parameter should be unique.
 class ArgonMeta:
     def __init_subclass__(cls) -> None:
@@ -19,17 +18,20 @@ class ArgonMeta:
 
         # Have to register ourselves too!
         localns[cls.__name__] = cls
+        #print(localns)
         
         
         # TODO: Make sure that this is actually correct
         super_init = super().__init_subclass__()
 
         # To handle generic type parameters, we should look them up dynamically at runtime
+        # print("==============================")
+        # print(cls)
+        # print(cls.__type_params__)
         for ind, tparam in enumerate(cls.__type_params__):
             param_name = tparam.__name__
 
             def accessor_tparam(self, ind=ind):
-                # print(f"Reading {self}.{param_name}")
                 if not hasattr(self, "__orig_class__"):
                     raise TypeError(
                         f"Cannot access type parameter {param_name} of {self.__class__}."
@@ -39,64 +41,72 @@ class ArgonMeta:
             accessor_tparam.__name__ = param_name
             setattr(cls, param_name, property(fget=accessor_tparam))
 
+
         # However, if the type parameter hole is filled, we should not use the old accessor anymore.
         # For example:
         # class Parent[T]: pass
         # class Child(Parent[int]): pass
         # When getting Child().T, it should not require __orig_class__ because it has been filled already.
-        print("==============================")
-        print(cls)
+        # print("==============================")
+        # print(cls)
         for base in types.get_original_bases(cls):
-            print(f"Base: {base}, type(base)= {type(base)}")
+            # print(f"Base: {base}, type(base)= {type(base)}")
             if isinstance(base, typing._GenericAlias):  # type: ignore -- We don't have a great alternative way for checking if an object is a GenericAlias
-                print(f"typing.get_origin(base)={typing.get_origin(base)}")
                 parent_params = typing.get_origin(base).__type_params__
                 parent_args = typing.get_args(base)
-                
-                print(parent_params)
-                print(parent_args)
 
                 for param, arg in zip(parent_params, parent_args):
 
                     print(param, arg, cls)
                     match arg:
                         case typing.TypeVar():
-                            print("In type var")
-                            def accessor_override(self, arg=arg):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs
-                                print(f"typing.TypeVar():{arg}")
+                            print("arg is TypeVar")
+                            def accessor_override(self, arg=arg):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs   
+                                
                                 if hasattr(self, arg.__name__):
                                     return getattr(self, arg.__name__)
                                 raise ArgonError(f"No arg named {arg}")
+                        
 
                         case typing.ForwardRef():
+                            print("arg is ForwardRef")
 
                             def accessor_override(self, arg=arg):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs
                                 
-                                localns["T"]=int
-                                print(f"typing.ForwardRef():{arg}")
+                                # print(f"self={self}, arg={arg}")   # self will be None as it's a forward reference                     
                                 retval = arg._evaluate(globalns, localns, frozenset())
-                                if isinstance(retval, typing._GenericAlias):  # type: ignore -- We don't have a great alternative way for checking if an object is a GenericAlias
-                                    print("It's a generic alias")
+                                if isinstance(retval, typing._GenericAlias):
+                                    # print("L77=-=-=-=-=-=-=-")
+                                    # print(self.__orig_class__)
+                                    return self.__orig_class__
+                                    # print(retval)
+                                    # if hasattr(self, "T"):
+                                    #     print("L86=-=-=-=-=-=-=-")
+                                    #     print(self.__orig_class__)
+                                    #     print(self.__orig_class__.__args__)
+                                    #     return self.__orig_class__
 
                                 if isinstance(retval, typing.TypeVar):
                                     return getattr(self, retval.__name__)
                                 return retval
 
                         case type():
+                            print("arg is type")
                             
-
                             def accessor_override(self, arg=arg, param=param):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs
-                                print(f"type():arg={arg}, param={param}")
+                                
+                                # print(f"type():arg={arg}, param={param}")
                                 # print(f"Retrieving {param} = {arg}")
                                 return arg
                         
 
                         case typing._GenericAlias():
+                            print("arg is _GenericAlias")
                             
 
                             def accessor_override(self, arg=arg, param=param):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs
-                                print(f"typing._GenericAlias():arg={arg}, param={param}")
-                                print(f"Retrieving {param} = {arg}")
+                                # print(f"typing._GenericAlias():arg={arg}, param={param}")
+                                # print(f"Retrieving {param} = {arg}")
                                 return arg
 
                         case _:

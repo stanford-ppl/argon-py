@@ -10,15 +10,10 @@ def test_stop_token():
 def test_fixed_tp_stream():
     state = State()
     with state:
-        #breakpoint()
         a = FStream[int]().const([FVal(1.0),FVal(2.0),Stop(1),FVal(3.0),FVal(4.0),Stop(2)])
-        #breakpoint()
         print(a)
-        #breakpoint()
         print(f"a.C = {a.C}")
-        #breakpoint()
         print(f"a.A = {a.A}")
-        #breakpoint()
         print(f"a.T = {a.T}")
 
 # def test_fixed_tp_stream_zip():
