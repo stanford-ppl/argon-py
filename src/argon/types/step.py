@@ -23,10 +23,11 @@ class FStream[T](Ref[List[Union[FVal,Stop]], "FStream[T]"]):
 
     @override
     def fresh(self) -> "FStream[T]":
-        print(f"print self = {repr(self)}")
+        # print(f"print self = {repr(self)}")
+        # print(f"From fresh: {self.T}")
+        
         # freshobj = fStream(self.rank)
         # use self to set the corresponding fields for Stream
-        print(f"From fresh: {self.T}")
         return FStream[self.T]()
     
     def zip(self, other:"FStream[T]") -> "FStream[T]":
