@@ -8,6 +8,7 @@ def test_tensor():
     state = State()
     with state:
         #breakpoint()
-        tensor = Tensor[TensorStorage]().const(TensorStorage(np.random((1,1)), None, None))
+        tensor = Tensor().const(TensorStorage(np.random((1,1)), None, None))
         #breakpoint()
         print(tensor)
+    print(state)

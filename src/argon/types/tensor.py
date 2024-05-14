@@ -1,5 +1,5 @@
 from pydantic.dataclasses import dataclass
-from typing import Union, override, List, TypeVar, Optional, Tuple
+from typing import Union, override, List, Any, TypeVar, Optional, Tuple
 from argon.ref import Ref
 from argon.srcctx import SrcCtx
 from argon.state import stage
@@ -8,14 +8,14 @@ import numpy as np
 @dataclass
 class Level:
     _format: Optional[str] = None
-    _coords: Optional[np.ndarray] = None
+    _coords: Optional[List[Any]] = None
 
     def __str__(self) -> str:
         return f"(Format: {self._format}, Coords: {self._coords})"
 
 @dataclass
 class TensorStorage:
-    value: Optional[np.ndarray] = None
+    value: Optional[List[Any]] = None
     levels: Optional[List[Level]] = None
     shape: Optional[Tuple[int, ...]] = None
 
