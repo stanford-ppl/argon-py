@@ -8,6 +8,18 @@ from argon.ref import Exp
 
 @dataclasses.dataclass
 class Block[B](ArgonMeta):
+    """
+    The Block[B] operation represents a block of code that contains a list of
+    inputs, statements, and a result.
+
+        inputs : List[Exp[Any, Any]]
+            The list of input expressions.
+        stms : List[Exp[Any, Any]]
+            The list of statement expressions.
+        result : Optional[Exp[Any, B]]
+            The result expression of the block.
+    """
+
     inputs: typing.List[Exp[typing.Any, typing.Any]] = pydantic.Field(
         default_factory=list
     )
@@ -19,14 +31,18 @@ class Block[B](ArgonMeta):
     def dump(self, indent_level=0) -> str:
         no_indent = "|   " * indent_level
         indent = "|   " * (indent_level + 1)
-        more_indent = '|   ' * (indent_level + 2)
+        more_indent = "|   " * (indent_level + 2)
         if self.inputs:
-            inputs_str = ', \n'.join(f"{more_indent}{input.dump(indent_level + 2)}" for input in self.inputs)
+            inputs_str = ", \n".join(
+                f"{more_indent}{input.dump(indent_level + 2)}" for input in self.inputs
+            )
             inputs_str = f"[\n{inputs_str}\n{indent}]"
         else:
             inputs_str = "[]"
         if self.stms:
-            stms_str = ', \n'.join(f"{more_indent}{stm.dump(indent_level + 2)}" for stm in self.stms)
+            stms_str = ", \n".join(
+                f"{more_indent}{stm.dump(indent_level + 2)}" for stm in self.stms
+            )
             stms_str = f"[\n{stms_str}\n{indent}]"
         else:
             stms_str = "[]"

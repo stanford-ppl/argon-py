@@ -4,6 +4,7 @@ import ast
 
 from argon.node.control import TransformIfExpressions
 
+
 def argon_function(func):
     # TODO: fix ctx, when this decorator is used in test_scopes.py,
     # the ctx no longer points to the correct row number + col offset
@@ -15,12 +16,15 @@ def argon_function(func):
 
     # Remove the decorators from the AST, because the modified function will
     # be passed to them anyway and we don't want them to be called twice.
-    func_stmt = parsed.body[0]
-    func_stmt.decorator_list = [
-        dec for dec in func_stmt.decorator_list
-        if not (isinstance(dec, ast.Name) and dec.id == 'argon_function')
-    ]
- 
+    for node in parsed.body:
+        if isinstance(node, ast.FunctionDef) and node.name == func.__name__:
+            node.decorator_list = [
+                dec
+                for dec in node.decorator_list
+                if not (isinstance(dec, ast.Name) and dec.id == "argon_function")
+            ]
+            break
+
     # Apply the AST transformation
     transformed = TransformIfExpressions().visit(parsed)
     transformed = ast.fix_missing_locations(transformed)
@@ -28,7 +32,7 @@ def argon_function(func):
     print(ast.unparse(transformed))
 
     # Compile the transformed AST
-    compiled = compile(transformed, filename=func.__code__.co_filename, mode='exec')
+    compiled = compile(transformed, filename=func.__code__.co_filename, mode="exec")
     # Create a new function from the compiled code
     func_globals = func.__globals__
     exec(compiled, func_globals)
