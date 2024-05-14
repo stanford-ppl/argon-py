@@ -1,6 +1,6 @@
 from argon.types.token import Stop, FVal, FStream
 from argon.state import State
-
+from typing import List
 
 def test_stop_token():
     a = Stop(1)

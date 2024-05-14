@@ -18,16 +18,12 @@ class ArgonMeta:
 
         # Have to register ourselves too!
         localns[cls.__name__] = cls
-        #print(localns)
         
         
         # TODO: Make sure that this is actually correct
         super_init = super().__init_subclass__()
 
         # To handle generic type parameters, we should look them up dynamically at runtime
-        # print("==============================")
-        # print(cls)
-        # print(cls.__type_params__)
         for ind, tparam in enumerate(cls.__type_params__):
             param_name = tparam.__name__
 
@@ -47,10 +43,7 @@ class ArgonMeta:
         # class Parent[T]: pass
         # class Child(Parent[int]): pass
         # When getting Child().T, it should not require __orig_class__ because it has been filled already.
-        # print("==============================")
-        # print(cls)
         for base in types.get_original_bases(cls):
-            # print(f"Base: {base}, type(base)= {type(base)}")
             if isinstance(base, typing._GenericAlias):  # type: ignore -- We don't have a great alternative way for checking if an object is a GenericAlias
                 parent_params = typing.get_origin(base).__type_params__
                 parent_args = typing.get_args(base)
@@ -76,15 +69,9 @@ class ArgonMeta:
                                 # print(f"self={self}, arg={arg}")   # self will be None as it's a forward reference                     
                                 retval = arg._evaluate(globalns, localns, frozenset())
                                 if isinstance(retval, typing._GenericAlias):
-                                    # print("L77=-=-=-=-=-=-=-")
-                                    # print(self.__orig_class__)
+                                    # __orig_class__ is an attribute set in GenericAlias.__call__ to 
+                                    # the instance of the GenericAlias that created the called class
                                     return self.__orig_class__
-                                    # print(retval)
-                                    # if hasattr(self, "T"):
-                                    #     print("L86=-=-=-=-=-=-=-")
-                                    #     print(self.__orig_class__)
-                                    #     print(self.__orig_class__.__args__)
-                                    #     return self.__orig_class__
 
                                 if isinstance(retval, typing.TypeVar):
                                     return getattr(self, retval.__name__)
