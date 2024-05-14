@@ -2,7 +2,7 @@ import functools
 import inspect
 import ast
 
-from argon.node.control import TransformIfExpressions
+from argon.virtualization.virtualizer import Transformer
 
 
 def argon_function(func):
@@ -26,7 +26,7 @@ def argon_function(func):
             break
 
     # Apply the AST transformation
-    transformed = TransformIfExpressions().visit(parsed)
+    transformed = Transformer().visit(parsed)
     transformed = ast.fix_missing_locations(transformed)
 
     print(ast.unparse(transformed))

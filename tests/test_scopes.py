@@ -1,12 +1,12 @@
 import copy
 import inspect
-from argon.node.control import *
 from argon.node.mux import Mux
 from argon.node.undefined import Undefined
 from argon.state import State
 from argon.types.integer import Integer
 from argon.types.boolean import Boolean
-from argon.wrapper import argon_function
+from argon.virtualization.wrapper import argon_function
+from argon.virtualization.virtualizer import *
 
 
 def test_scope():
