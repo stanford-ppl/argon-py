@@ -13,6 +13,7 @@ def test_scope():
         c = a + b
         d = c + b
 
+@argon_function
 def test_scope2():
     state = State()
     with state:
