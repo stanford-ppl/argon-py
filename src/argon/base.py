@@ -20,9 +20,9 @@ class ArgonMeta:
         # Have to register ourselves too!
         localns[cls.__name__] = cls
 
-        aug_localns = {}
+        aug_ns = {}
         for tparam in cls.__type_params__:
-            aug_localns[tparam.__name__] = tparam.__name__
+            aug_ns[tparam.__name__] = tparam.__name__
 
         # TODO: Make sure that this is actually correct
         super_init = super().__init_subclass__()
@@ -55,21 +55,28 @@ class ArgonMeta:
 
                             def accessor_override(self, arg=arg):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs
                                 print("accessor_override: arg is ForwardRef")
-                                # for key in aug_localns.keys():
-                                #     # print(f"key:{key}")
-                                #     if hasattr(self,key):
-                                #         aug_localns[key] = getattr(self, key)
-                                #         # print(f"aug_localns[key]={aug_localns[key]}")
-                                
-                                print(self.__orig_class__)
+
                                 retval = arg._evaluate(globalns, localns, frozenset())
+                                if isinstance(retval, typing._GenericAlias):
+                                    retval_typevar = typing.get_args(retval)
+                                    cls_typevar = typing.get_origin(retval).__type_params__
+                                    if retval_typevar == cls_typevar:
+                                        for key in retval_typevar:
+                                            if hasattr(self,key.__name__):
+                                                aug_ns[key.__name__] = getattr(self, key.__name__)
+                                        temp_global = {}
+                                        temp_global.update(globalns)
+                                        temp_global.update(aug_ns)
+
+                                        temp_local = {}
+                                        temp_local.update(localns)
+                                        temp_local.update(aug_ns)
+                                        retval = arg._evaluate(temp_global, temp_local, frozenset())
+                                    else:
+                                        raise ArgonError(
+                                            f"Type Param should be identical"
+                                        )
                                 
-                                print(self.__orig_class__)
-                                # print(f"retval={retval}")
-                                # if isinstance(retval, typing._GenericAlias):
-                                #     # __orig_class__ is an attribute set in GenericAlias.__call__ to 
-                                #     # the instance of the GenericAlias that created the called class
-                                #     return self.__orig_class__
 
                                 if isinstance(retval, typing.TypeVar):
                                     return getattr(self, retval.__name__)
@@ -113,7 +120,7 @@ class ArgonMeta:
                     raise TypeError(
                         f"Cannot access type parameter {param_name} of {self.__class__}."
                     )
-                #aug_localns[param_name] = self.__orig_class__.__args__[ind]
+                aug_ns[param_name] = self.__orig_class__.__args__[ind]
                 return self.__orig_class__.__args__[ind]
 
             accessor_tparam.__name__ = param_name
