@@ -4,26 +4,35 @@ from argon.ref import Ref, Const
 from argon.srcctx import SrcCtx
 from argon.state import stage
 import argon.node.sparse_torch as sparse_torch
+from enum import Enum
 
 T = TypeVar("T")
 
 
-@dataclass
+class Format(Enum):
+    DENSE = 0
+    COMPRESSED = 1
+
+
+@dataclass(frozen=True)
 class LevelFormat:
     level_format: Optional[str] = None
     # coords: Optional[List[int]] = None
 
     def __str__(self) -> str:
         # return f"(Format: {self.level_format}, Coords: {str(self.coords)})"
-        return f"Format: {self.level_format}"
+        return self.level_format
 
 
-@dataclass
+@dataclass(frozen=True)
 class TensorFormat:
     level_formats: Optional[List[LevelFormat]]
 
     def __str__(self) -> str:
-        return ", ".join([str(form) for form in self.level_formats])
+        return "Format: (" + ", ".join([str(form) for form in self.level_formats]) + ")"
+    
+    def format(self):
+        return self.level_formats
 
 
 @dataclass
@@ -33,10 +42,13 @@ class TensorStorage:
     shape: Optional[Tuple[int, ...]] = None
 
     def __str__(self) -> str:
-        return str(self.tensor_format)
+        return str(self.tensor_format) + "; Shape: " + str(self.shape)
 
     def shape(self):
         return self.shape
+    
+    def format(self):
+        return self.tensor_format
 
 
 class Tensor[T](Ref[TensorStorage, "Tensor[T]"]):
@@ -56,25 +68,25 @@ class Tensor[T](Ref[TensorStorage, "Tensor[T]"]):
         (m0, n0) = self.get_shape()
         (m1, n1) = other.get_shape()
         assert m0 == m1 and n0 == n1, f"Invalid shapes for element-wise addition with expected signature: (m,n),(m,n)->(m,n) -- actual shape: ({m0}, {n0}), ({m1}, {n1})"
-        return stage(sparse_torch.Add[Tensor[T := TensorStorage(tensor_format=TensorFormat([LevelFormat("compressed"), LevelFormat("compressed")]), shape=self.get_shape())]](self, other), ctx=SrcCtx.new(2))
+        return stage(sparse_torch.Add[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape())]](self, other), ctx=SrcCtx.new(2))
 
     def __sub__(self, other: "Tensor[T]") -> "Tensor[T]":
         (m0, n0) = self.get_shape()
         (m1, n1) = other.get_shape()
         assert m0 == m1 and n0 == n1, f"Invalid shapes for element-wise addition with expected signature: (m,n),(m,n)->(m,n) -- actual shape: ({m0}, {n0}), ({m1}, {n1})"
-        return stage(sparse_torch.Sub[Tensor[T := TensorStorage(tensor_format=TensorFormat([LevelFormat("compressed"), LevelFormat("compressed")]), shape=self.get_shape())]](self, other), ctx=SrcCtx.new(2))
+        return stage(sparse_torch.Sub[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape())]](self, other), ctx=SrcCtx.new(2))
 
     def __mul__(self, other: "Tensor[T]") -> "Tensor[T]":
         (m0, n0) = self.get_shape()
         (m1, n1) = other.get_shape()
         assert m0 == m1 and n0 == n1, f"Invalid shapes for element-wise multiplication with expected signature: (m,n),(m,n)->(m,n) -- actual shape: ({m0}, {n0}), ({m1}, {n1})"
-        return stage(sparse_torch.Mul[Tensor[T := TensorStorage(tensor_format=TensorFormat([LevelFormat("compressed"), LevelFormat("compressed")]), shape=self.get_shape())]](self, other), ctx=SrcCtx.new(2))
+        return stage(sparse_torch.Mul[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape())]](self, other), ctx=SrcCtx.new(2))
 
     def __truediv__(self, other: "Tensor[T]") -> "Tensor[T]":
         (m0, n0) = self.get_shape()
         (m1, n1) = other.get_shape()
         assert m0 == m1 and n0 == n1, f"Invalid shapes for element-wise addition with expected signature: (m,n),(m,n)->(m,n) -- actual shape: ({m0}, {n0}), ({m1}, {n1})"
-        return stage(sparse_torch.Div[Tensor[T := TensorStorage(tensor_format=TensorFormat([LevelFormat("compressed"), LevelFormat("compressed")]), shape=self.get_shape())]](self, other), ctx=SrcCtx.new(2))
+        return stage(sparse_torch.Div[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape())]](self, other), ctx=SrcCtx.new(2))
     
     def matmul(self, other: "Tensor[T]") -> "Tensor[T]":
         return self @ other
@@ -112,3 +124,6 @@ class Tensor[T](Ref[TensorStorage, "Tensor[T]"]):
         if type(self.rhs.val) != Const:
             return get_args(self.rhs.val.underlying.T)[0].tensor_format
         return self.rhs.val.value.tensor_format
+    
+    def __hash__(self):
+        return hash(tuple(self.get_format().format()))
