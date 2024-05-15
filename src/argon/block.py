@@ -33,10 +33,8 @@ class Block[B](ArgonMeta):
         indent = "|   " * (indent_level + 1)
         more_indent = "|   " * (indent_level + 2)
         if self.inputs:
-            inputs_str = ", \n".join(
-                f"{more_indent}{input.dump(indent_level + 2)}" for input in self.inputs
-            )
-            inputs_str = f"[\n{inputs_str}\n{indent}]"
+            inputs_str = ", ".join(str(input) for input in self.inputs)
+            inputs_str = f"[{inputs_str}]"
         else:
             inputs_str = "[]"
         if self.stms:

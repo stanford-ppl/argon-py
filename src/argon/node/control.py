@@ -29,7 +29,7 @@ class IfThenElse[T](Op[T]):
     @property
     @typing.override
     def inputs(self) -> typing.List[Sym[typing.Any]]:
-        return [self.cond] + self.thenBlk.stms + self.elseBlk.stms  # type: ignore
+        return [self.cond] + self.thenBlk.inputs + self.elseBlk.inputs  # type: ignore
 
     @typing.override
     def dump(self, indent_level=0) -> str:

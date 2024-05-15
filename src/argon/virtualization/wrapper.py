@@ -2,6 +2,7 @@ import functools
 import inspect
 import ast
 
+from argon.virtualization.func import ArgonFunction
 from argon.virtualization.virtualizer import Transformer
 
 
@@ -23,6 +24,8 @@ def argon_function(func):
                 for dec in node.decorator_list
                 if not (isinstance(dec, ast.Name) and dec.id == "argon_function")
             ]
+            node.args.kw_defaults.append(ast.Constant(value=None))
+            node.args.kwonlyargs.append(ast.arg(arg="__________argon", annotation=None))
             break
 
     # Apply the AST transformation
@@ -38,5 +41,15 @@ def argon_function(func):
     exec(compiled, func_globals)
 
     # Replace the original function with the transformed version
-    new_func = func_globals[func.__name__]
-    return functools.update_wrapper(new_func, func)
+    virtualized_func = ArgonFunction(
+        func, functools.update_wrapper(func_globals[func.__name__], func)
+    )
+
+    # Create a wrapper function that calls the transformed function
+    # Pytest will not be able to collect the test functions if they are not
+    def wrapper(*args, **kwargs):
+        return virtualized_func.call_transformed(*args, **kwargs)
+
+    wrapper.virtualized = virtualized_func  # type: ignore -- we need to add this flag to mark the function as virtualized
+
+    return functools.update_wrapper(wrapper, func)

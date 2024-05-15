@@ -4,7 +4,7 @@ import typing
 from argon.block import Block
 from argon.node.control import IfThenElse
 from argon.node.mux import Mux
-from argon.ref import Exp, Ref
+from argon.ref import Exp, Node, Ref
 from argon.srcctx import SrcCtx
 from argon.state import State, stage
 from argon.types.boolean import Boolean
@@ -38,26 +38,10 @@ def stage_if_exp_with_scopes(
     # Type check
     if thenBody.tp.A != elseBody.tp.A:
         raise TypeError(f"Type mismatch: {thenBody.tp.A} != {elseBody.tp.A}")
+
+    thenBlk = Block[thenBody.tp.A](get_inputs(then_scope.scope.symbols), then_scope.scope.symbols, thenBody)
+    elseBlk = Block[thenBody.tp.A](get_inputs(else_scope.scope.symbols), else_scope.scope.symbols, elseBody)
     
-    thenBlk = Block[thenBody.tp.A]([], then_scope.scope.symbols, thenBody)
-    elseBlk = Block[thenBody.tp.A]([], else_scope.scope.symbols, elseBody)
-    # then_scope.scope.symbols[0].rhs.val.underlying.inputs
-    
-    return stage(IfThenElse[thenBody.tp.A](cond, thenBlk, elseBlk), ctx=SrcCtx.new(2))
-
-
-def stage_if_exp(
-    cond: Boolean,
-    thenBody: Exp[typing.Any, typing.Any],
-    elseBody: Exp[typing.Any, typing.Any],
-) -> Ref[typing.Any, typing.Any]:
-    # Type check
-    if thenBody.tp.A != elseBody.tp.A:
-        raise TypeError(f"Type mismatch: {thenBody.tp.A} != {elseBody.tp.A}")
-
-    # Create blocks and stage
-    thenBlk = Block[thenBody.tp.A]([], [thenBody], thenBody)
-    elseBlk = Block[thenBody.tp.A]([], [elseBody], elseBody)
     return stage(IfThenElse[thenBody.tp.A](cond, thenBlk, elseBlk), ctx=SrcCtx.new(2))
 
 
@@ -66,9 +50,36 @@ def stage_if(
     thenBody: typing.List[Exp[typing.Any, typing.Any]],
     elseBody: typing.List[Exp[typing.Any, typing.Any]] = [],
 ) -> Ref[typing.Any, typing.Any]:
-    thenBlk = Block[Null]([], thenBody, Null().const(None))
-    elseBlk = Block[Null]([], elseBody, Null().const(None))
+    thenBlk = Block[Null](get_inputs(thenBody), thenBody, Null().const(None))
+    elseBlk = Block[Null](get_inputs(elseBody), elseBody, Null().const(None))
     return stage(IfThenElse[Null](cond, thenBlk, elseBlk), ctx=SrcCtx.new(2))
+
+
+def get_inputs(scope_symbols: typing.List[Exp[typing.Any, typing.Any]]) -> typing.List[Exp[typing.Any, typing.Any]]:
+    # We only want to consider symbols that have inputs in their rhs (i.e. Nodes)
+    # We also want to exclude Mux nodes from the list of inputs
+    scope_symbols = [
+        symbol for symbol in scope_symbols
+        if isinstance(symbol.rhs.val, Node) and not isinstance(symbol.rhs.val.underlying, Mux)
+    ]
+
+    # We use a symbol's id instead of just the symbol objects below because symbols
+    # are not hashable and Python complains.
+    # Create a dictionary mapping IDs to symbols
+    symbol_map = {symbol.rhs.val.id: symbol for symbol in scope_symbols}
+
+    all_symbol_ids = set(symbol_map.keys())
+
+    # The list of inputs in our scope constitutes the set of all inputs of all symbols 
+    # minus the set of all symbols defined in this scope
+    all_input_ids = set()
+    for symbol in scope_symbols:
+        inputs = symbol.rhs.val.underlying.inputs
+        symbol_map.update({input.rhs.val.id: input for input in inputs if isinstance(input.rhs.val, Node)})
+        all_input_ids.update({input.rhs.val.id for input in inputs if isinstance(input.rhs.val, Node)})
+    
+    result_ids = all_input_ids - all_symbol_ids
+    return [symbol_map[result_id] for result_id in result_ids]
 
 
 class Transformer(ast.NodeTransformer):
@@ -85,7 +96,23 @@ class Transformer(ast.NodeTransformer):
 
         # Stage if expression call
         func_call = ast.Call(
-            func=ast.Name(id="stage_if_exp_with_scopes", ctx=ast.Load()),
+            func=ast.Attribute(
+                value=ast.Attribute(
+                    value=ast.Attribute(
+                        value=ast.Attribute(
+                            value=ast.Name(id="__________argon", ctx=ast.Load()),
+                            attr="argon",
+                            ctx=ast.Load()
+                        ),
+                        attr="virtualization",
+                        ctx=ast.Load()
+                    ),
+                    attr="virtualizer",
+                    ctx=ast.Load()
+                ),
+                attr="stage_if_exp_with_scopes",
+                ctx=ast.Load()
+            ),
             args=[
                 node.test,  # the condition in the if expression
                 ast.Lambda(  # the expression for the 'true' case wrapped in a lambda
@@ -150,7 +177,7 @@ try:
     {temp_var} = lambda _, {var} = {var}: {var}
     {temp_var_exists} = True
 except NameError:
-    {temp_var} = lambda T : stage(Undefined[T]("{var}"))
+    {temp_var} = lambda T : stage(__________argon.argon.node.undefined.Undefined[T]("{var}"))
     {temp_var_exists} = False
 """
                 ).body
@@ -230,13 +257,13 @@ except NameError:
         if node.orelse:
             new_body.extend(
                 ast.parse(
-                    f"stage_if({self.generate_temp_var("cond")}, {then_scope_name}.scope.symbols, {else_scope_name}.scope.symbols)"
+                    f"__________argon.argon.virtualization.virtualizer.stage_if({self.generate_temp_var("cond")}, {then_scope_name}.scope.symbols, {else_scope_name}.scope.symbols)"
                 ).body
             )
         else:
             new_body.extend(
                 ast.parse(
-                    f"stage_if({self.generate_temp_var('cond')}, {then_scope_name}.scope.symbols)"
+                    f"__________argon.argon.virtualization.virtualizer.stage_if({self.generate_temp_var('cond')}, {then_scope_name}.scope.symbols)"
                 ).body
             )
 
@@ -248,13 +275,13 @@ except NameError:
             temp_var_T = self.generate_temp_var(var, "T")
             new_body.extend(
                 ast.parse(
-                    f"{var} = stage_mux({temp_var_cond}, {temp_var_then}({temp_var_T}), {temp_var_else}({temp_var_T}))"
+                    f"{var} = __________argon.argon.virtualization.virtualizer.stage_mux({temp_var_cond}, {temp_var_then}({temp_var_T}), {temp_var_else}({temp_var_T}))"
                 ).body
             )
 
         # Delete all temporary variables
+        ast.Delete(targets=[ast.Name(id=self.generate_temp_var("cond"), ctx=ast.Del())])
         for var in assigned_vars:
-            temp_var_cond = self.generate_temp_var("cond")
             temp_var_old = self.generate_temp_var(var, "old")
             temp_var_old_exists = self.generate_temp_var(var, "old", "exists")
             temp_var_then = self.generate_temp_var(var, "then")
@@ -262,7 +289,6 @@ except NameError:
             temp_var_T = self.generate_temp_var(var, "T")
             new_body.extend(
                 [
-                    ast.Delete(targets=[ast.Name(id=temp_var_cond, ctx=ast.Del())]),
                     ast.Delete(targets=[ast.Name(id=temp_var_old, ctx=ast.Del())]),
                     ast.Delete(
                         targets=[ast.Name(id=temp_var_old_exists, ctx=ast.Del())]
