@@ -19,24 +19,18 @@ class ExpType[C, A](ArgonMeta, abc.ABC):
         raise NotImplementedError()
 
     def _new(self, d: "Def[C, A]", ctx: SrcCtx) -> A:
-        print(self.__orig_class__)
-        breakpoint()
+        
         right_type = typing.cast(type, self.A)
-        print(self.__orig_class__)
-        breakpoint()
-        print(type(right_type))
+        
         empty_val: Ref = typing.cast(Ref, right_type().fresh())
         print(type(right_type))
-        print(self.__orig_class__)
-        breakpoint()
+        
         empty_val.rhs = d
         empty_val.ctx = ctx
-        print(self.__orig_class__)
-        breakpoint()
+        
         return typing.cast(A, empty_val)
 
     def const(self, c: C) -> A:
-        breakpoint()
         return self._new(Def(Const(c)), SrcCtx.new(2))
 
     # A, C shims are used to silence typing errors -- their actual definitions are provided by ArgonMeta

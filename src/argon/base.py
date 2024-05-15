@@ -54,7 +54,6 @@ class ArgonMeta:
                             print("arg is ForwardRef")
 
                             def accessor_override(self, arg=arg):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs
-                                breakpoint()
                                 print("accessor_override: arg is ForwardRef")
                                 # for key in aug_localns.keys():
                                 #     # print(f"key:{key}")
@@ -106,17 +105,14 @@ class ArgonMeta:
         for ind, tparam in enumerate(cls.__type_params__):
             param_name = tparam.__name__
 
-            print(f"setting accessor_tparam for {param_name}")
+            #print(f"setting accessor_tparam for {param_name}")
 
             def accessor_tparam(self, ind=ind):
-                breakpoint()
-                print(f"L35:{self.__orig_class__}")
-                print(f"Reading {self}.{param_name}")
+                # breakpoint()
                 if not hasattr(self, "__orig_class__"):
                     raise TypeError(
                         f"Cannot access type parameter {param_name} of {self.__class__}."
                     )
-                print(self.__orig_class__.__args__[ind])
                 #aug_localns[param_name] = self.__orig_class__.__args__[ind]
                 return self.__orig_class__.__args__[ind]
 

@@ -40,7 +40,6 @@ class UStream[U](Ref[List[Union[FVal,Stop]], "UStream[int]"]):
 
     @override
     def fresh(self) -> "UStream[U]":
-        breakpoint()
         # print(f"print self = {repr(self)}")
         # print(f"From fresh: {self.T}")
         
