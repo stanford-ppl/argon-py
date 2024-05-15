@@ -34,3 +34,16 @@ class FStream[T](Ref[List[Union[FVal,Stop]], "FStream[T]"]):
         import argon.node.step as step
 
         return stage(step.Zip[FStream[T]](self, other), ctx=SrcCtx.new(2))
+
+U = TypeVar("U")
+class UStream[U](Ref[List[Union[FVal,Stop]], "UStream[int]"]):
+
+    @override
+    def fresh(self) -> "UStream[U]":
+        breakpoint()
+        # print(f"print self = {repr(self)}")
+        # print(f"From fresh: {self.T}")
+        
+        # freshobj = fStream(self.rank)
+        # use self to set the corresponding fields for Stream
+        return UStream[self.U]()
