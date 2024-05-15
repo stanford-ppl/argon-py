@@ -1,5 +1,5 @@
 from pydantic.dataclasses import dataclass
-from typing import Union, override, List, Any, TypeVar, Optional, Tuple, get_origin
+from typing import override, List, TypeVar, Optional, Tuple, get_args
 from argon.ref import Ref, Const
 from argon.srcctx import SrcCtx
 from argon.state import stage
@@ -45,30 +45,70 @@ class Tensor[T](Ref[TensorStorage, "Tensor[T]"]):
     def fresh(self) -> "Tensor[T]":
         return Tensor[self.T]()
 
-    def __mul__(self, other: "Tensor[T]") -> "Tensor[T]":
-        (m, k0) = self.shape()
-        (k1, n) = other.shape()
+    def __matmul__(self, other: "Tensor[T]") -> "Tensor[T]":
+        (m, k0) = self.get_shape()
+        (k1, n) = other.get_shape()
         assert k0 == k1, f"Invalid shapes for matrix multiplication with expected signature: (n,k),(k,m)->(n,m) -- actual shape: ({
             m}, {k0}), ({k1}, {n})"
-        # print(sparse_torch.Mul[Tensor[self.T]](self, other))
-        return stage(sparse_torch.Mul[Tensor[T := TensorStorage(tensor_format=TensorFormat([LevelFormat("dense")]), shape=(self.shape()[0], other.shape()[1]))]](self, other), ctx=SrcCtx.new(2))
+        return stage(sparse_torch.Matmul[Tensor[T := TensorStorage(tensor_format=TensorFormat([LevelFormat("compressed"), LevelFormat("compressed")]), shape=(self.get_shape()[0], other.get_shape()[1]))]](self, other), ctx=SrcCtx.new(2))
 
     def __add__(self, other: "Tensor[T]") -> "Tensor[T]":
-        (m0, n0) = self.shape()
-        (m1, n1) = other.shape()
-        assert m0 == m1 and n0 == n1, f"Invalid shapes for matrix addition with expected signature: (m,n),(m,n)->(m,n)"
-        return stage(sparse_torch.Add[Tensor[self.T]](self, other), ctx=SrcCtx.new(2))
+        (m0, n0) = self.get_shape()
+        (m1, n1) = other.get_shape()
+        assert m0 == m1 and n0 == n1, f"Invalid shapes for element-wise addition with expected signature: (m,n),(m,n)->(m,n) -- actual shape: ({m0}, {n0}), ({m1}, {n1})"
+        return stage(sparse_torch.Add[Tensor[T := TensorStorage(tensor_format=TensorFormat([LevelFormat("compressed"), LevelFormat("compressed")]), shape=self.get_shape())]](self, other), ctx=SrcCtx.new(2))
 
-    def shape(self):
+    def __sub__(self, other: "Tensor[T]") -> "Tensor[T]":
+        (m0, n0) = self.get_shape()
+        (m1, n1) = other.get_shape()
+        assert m0 == m1 and n0 == n1, f"Invalid shapes for element-wise addition with expected signature: (m,n),(m,n)->(m,n) -- actual shape: ({m0}, {n0}), ({m1}, {n1})"
+        return stage(sparse_torch.Sub[Tensor[T := TensorStorage(tensor_format=TensorFormat([LevelFormat("compressed"), LevelFormat("compressed")]), shape=self.get_shape())]](self, other), ctx=SrcCtx.new(2))
+
+    def __mul__(self, other: "Tensor[T]") -> "Tensor[T]":
+        (m0, n0) = self.get_shape()
+        (m1, n1) = other.get_shape()
+        assert m0 == m1 and n0 == n1, f"Invalid shapes for element-wise multiplication with expected signature: (m,n),(m,n)->(m,n) -- actual shape: ({m0}, {n0}), ({m1}, {n1})"
+        return stage(sparse_torch.Mul[Tensor[T := TensorStorage(tensor_format=TensorFormat([LevelFormat("compressed"), LevelFormat("compressed")]), shape=self.get_shape())]](self, other), ctx=SrcCtx.new(2))
+
+    def __truediv__(self, other: "Tensor[T]") -> "Tensor[T]":
+        (m0, n0) = self.get_shape()
+        (m1, n1) = other.get_shape()
+        assert m0 == m1 and n0 == n1, f"Invalid shapes for element-wise addition with expected signature: (m,n),(m,n)->(m,n) -- actual shape: ({m0}, {n0}), ({m1}, {n1})"
+        return stage(sparse_torch.Div[Tensor[T := TensorStorage(tensor_format=TensorFormat([LevelFormat("compressed"), LevelFormat("compressed")]), shape=self.get_shape())]](self, other), ctx=SrcCtx.new(2))
+    
+    def matmul(self, other: "Tensor[T]") -> "Tensor[T]":
+        return self @ other
+
+    def add(self, other: "Tensor[T]") -> "Tensor[T]":
+        return self + other
+
+    def sub(self, other: "Tensor[T]") -> "Tensor[T]":
+        return self - other
+
+    def mul(self, other: "Tensor[T]") -> "Tensor[T]":
+        return self * other
+    
+    def relu(self):
+        return stage(sparse_torch.ReLU[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape())]](self))
+
+    def softmax(self):
+        return stage(sparse_torch.Softmax[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape())]](self))
+    
+    def exp(self):
+        return stage(sparse_torch.Exp[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape())]](self))
+    
+    def reduce(self):
+        return stage(sparse_torch.Reduce[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape())]](self))
+
+    def max_reduce(self):
+        return stage(sparse_torch.MaxReduce[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape())]](self))
+    
+    def get_shape(self) -> Tuple[int, ...]:
         if type(self.rhs.val) != Const:
-            print(self.rhs.val.T)
-            type_args = self.rhs.val.underlying.R.T()
-            print("Type args: ", type_args)
-            # tensor_storage_type = type(type_args)
-            # print(tensor_storage_type)
-            # shape_origin = get_origin(tensor_storage_type.__dict__["shape"])
-            raise TypeError("Not a const object")
+            return get_args(self.rhs.val.underlying.T)[0].shape
         return self.rhs.val.value.shape
 
-    def format(self):
+    def get_format(self) -> TensorFormat:
+        if type(self.rhs.val) != Const:
+            return get_args(self.rhs.val.underlying.T)[0].tensor_format
         return self.rhs.val.value.tensor_format

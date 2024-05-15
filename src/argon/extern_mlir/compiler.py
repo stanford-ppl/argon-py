@@ -11,6 +11,11 @@ from mlir.dialects import builtin
 from mlir.dialects import func
 from mlir.dialects.linalg.opdsl import lang as dsl
 
+from argon.node import sparse_torch
+from argon.ref import Exp, Op, Sym
+from argon.types.tensor import Tensor, TensorFormat
+from argon.state import State
+
 _SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(_SCRIPT_PATH)
 
@@ -46,63 +51,20 @@ def build_SpMM(attr: st.EncodingAttr):
     return module
 
 
-def boilerplate(attr: st.EncodingAttr):
-    """Returns boilerplate main method.
-
-    This method sets up a boilerplate main method that takes three tensors
-    (a, b, c), converts the first tensor a into s sparse tensor, and then
-    calls the sparse kernel for matrix multiplication. For convenience,
-    this part is purely done as string input.
-    """
-    return f"""
-func.func @main(%ad: tensor<3x4xf64>, %b: tensor<4x2xf64>, %c: tensor<3x2xf64>) -> tensor<3x2xf64>
-  attributes {{ llvm.emit_c_interface }} {{
-  %a = sparse_tensor.convert %ad : tensor<3x4xf64> to tensor<3x4xf64, {attr}>
-  %0 = call @spMxM(%a, %b, %c) : (tensor<3x4xf64, {attr}>,
-                                  tensor<4x2xf64>,
-                                  tensor<3x2xf64>) -> tensor<3x2xf64>
-  return %0 : tensor<3x2xf64>
-}}
-"""
-
-
-def build_compile_and_run_SpMM(attr: st.EncodingAttr, compiler):
+def build_compile_and_run_matmul(attr: st.EncodingAttr, compiler):
     # Build.
     module = build_SpMM(attr)
     module.dump()
     func = str(module.operation.regions[0].blocks[0].operations[0].operation)
-    # module = ir.Module.parse(func + boilerplate(attr))
 
-    # Compile.
-    # engine = compiler.compile_and_jit(module)
 
-    # Set up numpy input and buffer for output.
-    a = np.array(
-        [[1.1, 0.0, 0.0, 1.4], [0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 3.3, 0.0]], np.float64
-    )
-    b = np.array([[1.0, 2.0], [4.0, 3.0], [5.0, 6.0], [8.0, 7.0]], np.float64)
-    c = np.zeros((3, 2), np.float64)
-
-    mem_a = ctypes.pointer(ctypes.pointer(rt.get_ranked_memref_descriptor(a)))
-    mem_b = ctypes.pointer(ctypes.pointer(rt.get_ranked_memref_descriptor(b)))
-    mem_c = ctypes.pointer(ctypes.pointer(rt.get_ranked_memref_descriptor(c)))
-    # Allocate a MemRefDescriptor to receive the output tensor.
-    # The buffer itself is allocated inside the MLIR code generation.
-    ref_out = rt.make_nd_memref_descriptor(2, ctypes.c_double)()
-    mem_out = ctypes.pointer(ctypes.pointer(ref_out))
-
-    # Invoke the kernel and get numpy output.
-    # Built-in bufferization uses in-out buffers.
-    # TODO: replace with inplace comprehensive bufferization.
-    # engine.invoke("main", mem_out, mem_a, mem_b, mem_c)
-
-    # Sanity check on computed result.
-    # expected = np.matmul(a, b)
-    # c = rt.ranked_memref_to_numpy(mem_out[0])
-    # if np.allclose(c, expected):
-    #     pass
-    # else:
-    #     quit(f"FAILURE")
+def process_state(state: State):
+    state.scope.dump()
+    # FIXME: Figure out how to retrieve ops from state
+    # for item in state.scope.symbols:
+    # #     if isinstance(item, Sym):
+            # print(item)
+            # print(item.get_shape())
 
 
 def main():
@@ -111,8 +73,6 @@ def main():
     # if not os.path.exists(support_lib):
         # raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), support_lib)
 
-    # CHECK-LABEL: TEST: testSpMM
-    print("\nTEST: testSpMM")
     with ir.Context() as ctx, ir.Location.unknown():
         count = 0
         # Loop over various ways to compile and annotate the SpMM kernel with
@@ -148,7 +108,6 @@ def main():
                         build_compile_and_run_SpMM(attr, None)
                         count = count + 1
         # CHECK: Passed 8 tests
-        # ir.dump()
         print("Passed ", count, "tests")
 
 

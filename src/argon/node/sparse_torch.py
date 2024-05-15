@@ -10,7 +10,17 @@ T = typing.TypeVar("T", bound=Exp[typing.Any, typing.Any], covariant=True)
 
 
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
-class Add[T](Op[T]):
+class Unary[T](Op[T]):
+    a: T
+
+    @property
+    @typing.override
+    def inputs(self) -> typing.List[Sym[typing.Any]]:
+        return [self.a]
+    
+
+@dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
+class Binary[T](Op[T]):
     a: T
     b: T
 
@@ -18,24 +28,44 @@ class Add[T](Op[T]):
     @typing.override
     def inputs(self) -> typing.List[Sym[typing.Any]]:
         return [self.a, self.b]  # type: ignore
+
+
+@dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
+class Add[T](Binary):
+    pass
+
+@dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
+class Mul[T](Binary):
+    pass
+
+@dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
+class Matmul[T](Binary):
+    pass
+
+@dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
+class Div[T](Binary):
+    pass
     
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
-class Mul[T](Op[T]):
-    a: T
-    b: T
-
-    @property
-    @typing.override
-    def inputs(self) -> typing.List[Sym[typing.Any]]:
-        return [self.a, self.b]  # type: ignore
+class Sub[T](Binary):
+    pass
     
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
-class Matmul[T](Op[T]):
-    a: T
-    b: T
+class Softmax[T](Unary):
+    pass
+    
+@dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
+class ReLU[T](Unary):
+    pass
 
-    @property
-    @typing.override
-    def inputs(self) -> typing.List[Sym[typing.Any]]:
-        # TODO: Check if shapes are legal for matmul
-        return [self.a, self.b]  # type: ignore
+@dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
+class Exp[T](Unary):
+    pass
+
+@dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
+class Reduce[T](Unary):
+    pass
+
+@dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
+class MaxReduce[T](Unary):
+    pass
