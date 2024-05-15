@@ -1,14 +1,17 @@
-from argon.types.tensor import Level, TensorStorage, Tensor
 from argon.state import State
 from argon.wrapper import argon_function
-import numpy as np
+from argon.types.tensor import LevelFormat, TensorStorage, TensorFormat, Tensor
+# from compiler import dump_mlir
 
-@argon_function
+
 def test_tensor():
     state = State()
     with state:
-        #breakpoint()
-        tensor = Tensor().const(TensorStorage(np.random((1,1)), None, None))
-        #breakpoint()
-        print(tensor)
+        a = Tensor().const(TensorStorage(TensorFormat(
+            [LevelFormat("compressed"), LevelFormat("dense")]), (1, 2)))
+        b = Tensor().const(TensorStorage(TensorFormat(
+            [LevelFormat("dense"), LevelFormat("dense")]), (2, 2)))
+        c = a * b + a * b + a
+        print(c.T)
+        # print(c.tensor_format())
     print(state)
