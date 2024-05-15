@@ -125,8 +125,8 @@ class ArgonMeta:
 
             accessor_tparam.__name__ = param_name
             prop = property(fget=accessor_tparam)
-            print(prop)
+            # print(prop)
             setattr(cls, param_name, prop)
-            print(getattr(cls,param_name))
+            # print(getattr(cls,param_name))
         
         return super_init
