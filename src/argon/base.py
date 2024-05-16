@@ -20,9 +20,7 @@ class ArgonMeta:
         # Have to register ourselves too!
         localns[cls.__name__] = cls
 
-        aug_ns = {}
-        for tparam in cls.__type_params__:
-            aug_ns[tparam.__name__] = tparam.__name__
+        #tparam_set = set()
 
         # TODO: Make sure that this is actually correct
         super_init = super().__init_subclass__()
@@ -58,25 +56,23 @@ class ArgonMeta:
 
                                 retval = arg._evaluate(globalns, localns, frozenset())
                                 if isinstance(retval, typing._GenericAlias):
-                                    retval_typevar = typing.get_args(retval)
-                                    cls_typevar = typing.get_origin(retval).__type_params__
-                                    if retval_typevar == cls_typevar:
-                                        for key in retval_typevar:
-                                            if hasattr(self,key.__name__):
-                                                aug_ns[key.__name__] = getattr(self, key.__name__)
-                                        temp_global = {}
-                                        temp_global.update(globalns)
-                                        temp_global.update(aug_ns)
+                                    temp_global = {}
+                                    temp_local = {}
+                                    aug_ns = {}
 
-                                        temp_local = {}
-                                        temp_local.update(localns)
-                                        temp_local.update(aug_ns)
-                                        retval = arg._evaluate(temp_global, temp_local, frozenset())
-                                    else:
-                                        raise ArgonError(
-                                            f"Type Param should be identical"
-                                        )
-                                
+                                    for retval_arg in typing.get_args(retval):
+                                        if isinstance(retval_arg, typing.TypeVar):
+                                            if hasattr(self,retval_arg.__name__):
+                                                aug_ns[retval_arg.__name__] = getattr(self, retval_arg.__name__)
+                                        
+                                    temp_global.update(globalns)
+                                    temp_global.update(aug_ns)
+
+                                    temp_local.update(localns)
+                                    temp_local.update(aug_ns)
+
+                                    return arg._evaluate(temp_global, temp_local, frozenset())
+
 
                                 if isinstance(retval, typing.TypeVar):
                                     return getattr(self, retval.__name__)
@@ -111,6 +107,8 @@ class ArgonMeta:
         # To handle generic type parameters, we should look them up dynamically at runtime
         for ind, tparam in enumerate(cls.__type_params__):
             param_name = tparam.__name__
+            #tparam_set.add(param_name)
+            
 
             #print(f"setting accessor_tparam for {param_name}")
 
@@ -120,7 +118,6 @@ class ArgonMeta:
                     raise TypeError(
                         f"Cannot access type parameter {param_name} of {self.__class__}."
                     )
-                aug_ns[param_name] = self.__orig_class__.__args__[ind]
                 return self.__orig_class__.__args__[ind]
 
             accessor_tparam.__name__ = param_name
