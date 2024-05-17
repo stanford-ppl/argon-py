@@ -20,7 +20,7 @@ class ArgonMeta:
         # Have to register ourselves too!
         localns[cls.__name__] = cls
 
-        #tparam_set = set()
+        tparam_set = set()
 
         # TODO: Make sure that this is actually correct
         super_init = super().__init_subclass__()
@@ -60,11 +60,9 @@ class ArgonMeta:
                                     temp_local = {}
                                     aug_ns = {}
 
-                                    for retval_arg in typing.get_args(retval):
-                                        if isinstance(retval_arg, typing.TypeVar):
-                                            if hasattr(self,retval_arg.__name__):
-                                                aug_ns[retval_arg.__name__] = getattr(self, retval_arg.__name__)
-                                        
+                                    for key in tparam_set:
+                                        aug_ns[key] = getattr(self, key)
+
                                     temp_global.update(globalns)
                                     temp_global.update(aug_ns)
 
@@ -107,7 +105,7 @@ class ArgonMeta:
         # To handle generic type parameters, we should look them up dynamically at runtime
         for ind, tparam in enumerate(cls.__type_params__):
             param_name = tparam.__name__
-            #tparam_set.add(param_name)
+            tparam_set.add(param_name)
             
 
             #print(f"setting accessor_tparam for {param_name}")
