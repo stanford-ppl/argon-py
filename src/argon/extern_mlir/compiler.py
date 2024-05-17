@@ -27,36 +27,11 @@ _SCRIPT_PATH = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(_SCRIPT_PATH)
 
 
-# TODO: Not needed for matmul anymore but might need it for einsums
-@dsl.linalg_structured_op
-def matmul_dsl(
-    A=dsl.TensorDef(dsl.T, dsl.S.M, dsl.S.K),
-    B=dsl.TensorDef(dsl.T, dsl.S.K, dsl.S.N),
-    C=dsl.TensorDef(dsl.T, dsl.S.M, dsl.S.N, output=True),
-):
-    C[dsl.D.m, dsl.D.n] += A[dsl.D.m, dsl.D.k] * B[dsl.D.k, dsl.D.n]
-
-
-@dsl.linalg_structured_op
-def reduce_dsl(
-    A=dsl.TensorDef(dsl.T, dsl.S.M, dsl.S.K),
-    B=dsl.TensorDef(dsl.T, dsl.S.M, dsl.S.N, output=True),
-):
-    pass
-    # C[dsl.D.m, dsl.D.n] += A[dsl.D.m, dsl.D.k] * B[dsl.D.k, dsl.D.n]
-
-
 def build_matmul(args: List[ir.RankedTensorType]):
     return matmul(args[0], args[1], outs=[args[2]])
 
-# @linalg_structured_op(op_name="custom_op_name")
-# def reduce_func(I=TensorDef(T, *S.DimList), O=TensorDef(T, *S.DimList[:-1], output=True)):
-#     O[*S.Dimlist[:-1]] += I[*S.DimList]
-
 
 def build_reduce(args: List[ir.RankedTensorType]):
-
-    # t = reduce_func(args[0], outs=[args[1]])
     inputs = args[0]
     output = args[1]
     input_shape = inputs.type.shape
@@ -85,7 +60,6 @@ def build_reduce(args: List[ir.RankedTensorType]):
 
 
 def build_max_reduce(args: List[ir.RankedTensorType]):
-    # i64 = ir.IntegerType.get_signless(64)
     inputs = args[0]
     output = args[1]
     select_output = args[2]
@@ -127,61 +101,13 @@ def build_add(args: List[ir.RankedTensorType]):
 
 
 def build_sub(args: List[ir.RankedTensorType]):
+    print(args)
     return sub(args[0], args[1], outs=[args[2]])
 
 
 def build_exp(args: List[ir.RankedTensorType]):
+    print(args)
     return exp(args[0], outs=[args[1]])
-
-
-def test_build():
-    with ir.Context() as ctx, ir.Location.unknown(ctx):
-        module = ir.Module.create()
-        with ir.InsertionPoint(module.body):
-
-            f32 = ir.F32Type.get()
-            i64 = ir.IntegerType.get_signless(64)
-
-            # Input tensor type
-            tensor_1x10xf32 = ir.RankedTensorType.get([1, 10], f32)
-
-            # Output tensor types
-            tensor_1x1xf32 = ir.RankedTensorType.get([1, 1], f32)
-            tensor_1x1xi64 = ir.RankedTensorType.get([1, 1], i64)
-
-            # Indexing maps
-            map0 = affine.AffineMap.get(4, 0, [affine.AffineDimExpr.get(
-                # (d0, d1, d2, d3) -> (d0, d1)
-                0), affine.AffineDimExpr.get(1)])
-            # (d0, d1, d2, d3) -> (d2)
-            map1 = affine.AffineMap.get(4, 0, [affine.AffineDimExpr.get(2)])
-            # (d0, d1, d2, d3) -> (d3)
-            map2 = affine.AffineMap.get(4, 0, [affine.AffineDimExpr.get(3)])
-
-            # Build the linalg.generic operation
-            generic_op = linalg.GenericOp(
-                [tensor_1x1xf32, tensor_1x1xi64],  # Output operand types
-                [tensor_1x10xf32],                  # Input operand types
-                [tensor_1x1xf32, tensor_1x1xi64],  # Output operand types
-                [map0, map1, map2],                 # Indexing maps
-                ["parallel", "reduction"],           # Iterator types
-                doc=None, library_call=None)
-
-            # Region for the body of the operation
-            with ir.InsertionPoint(generic_op.regions[0].blocks.append()):
-                in_ = generic_op.regions[0].blocks[0].arguments[0]
-                out_ = generic_op.regions[0].blocks[0].arguments[1]
-                out_5 = generic_op.regions[0].blocks[0].arguments[2]
-
-                index_1 = linalg.IndexOp(1).result
-                index_1_i64 = arith.IndexCastOp(i64, index_1).result
-                max_f = arith.MaximumFOp(in_, out_).result
-                cmp_f = arith.CmpFOp(arith.CmpFPredicate.OGT, in_, out_).result
-                select = arith.SelectOp(cmp_f, index_1_i64, out_5).result
-                linalg.YieldOp([max_f, select])
-
-            # Print the generated IR
-            # print(module)
 
 
 def get_attr(val: Tensor):
@@ -197,21 +123,22 @@ def get_attr(val: Tensor):
 
 
 def process_state(state: State):
-    ops = []
-    inputs = []
-    outputs = []
     tensorToMLIRTensor = {}
 
-    # test_build()
-    # exit(0)
-
     with ir.Context() as ctx, ir.Location.unknown():
+        i64 = ir.IntegerType.get_signless(64)
         f32 = ir.F32Type.get()
         module = ir.Module.create()
         with ir.InsertionPoint(module.body):
             @func.FuncOp.from_py_func()
             def generated_func():
                 output = None
+                zero_f = arith.constant(
+                    result=f32, value=0.0)
+                zero_i = arith.constant(
+                    result=i64, value=0)
+                max_num = arith.FloatAttr.get_f32(float("inf"))
+                max_const = arith.constant(result=f32, value=max_num)
                 for op_output in state.scope.symbols:
                     op_operands = []
                     for tensor_input in op_output.rhs.val.underlying.inputs:
@@ -223,10 +150,9 @@ def process_state(state: State):
                             tensor_type = ir.RankedTensorType.get(
                                 list(tensor_input.get_shape()), f32, attr)
                             # TODO: Replace with actual values
-                            mlir_val_tensor = arith.constant(
-                                result=f32, value=0.0)
-                            mlir_tensor = fill(mlir_val_tensor, outs=[
-                                tensor.empty(tensor_type, [])])
+                            init_tensor = tensor.empty(tensor_type, [])
+                            mlir_tensor = fill(zero_f, outs=[
+                                init_tensor])
                             tensorToMLIRTensor[tensor_input] = mlir_tensor
                             op_operands.append(mlir_tensor)
                     # Create rankedtensortype for output
@@ -237,21 +163,24 @@ def process_state(state: State):
                         attr = get_attr(op_output)
                         tensor_type = ir.RankedTensorType.get(
                             op_output.get_shape(), f32, attr)
-                        mlir_tensor = tensor.empty(tensor_type, [])
+                        init_tensor = tensor.empty(tensor_type, [])
+                        mlir_tensor = fill(max_const if type(
+                            op_output.rhs.val.underlying) == sparse_torch.MaxReduce else zero_f, outs=[init_tensor])
                         tensorToMLIRTensor[op_output] = mlir_tensor
                         op_operands.append(mlir_tensor)
                     if type(op_output.rhs.val.underlying) == sparse_torch.MaxReduce:
-                        i64 = ir.IntegerType.get_signless(64)
-                        i64_select_out = ir.RankedTensorType.get(op_output.get_shape(), i64)
+                        i64_select_out = ir.RankedTensorType.get(
+                            op_output.get_shape(), i64)
                         init_tensor = tensor.empty(i64_select_out, [])
-                        const_val = arith.constant(result=i64, value=0)
-                        fill_val = linalg.fill(const_val, outs=[init_tensor])
+                        fill_val = linalg.fill(zero_i, outs=[init_tensor])
                         op_operands.append(fill_val)
                     match type(op_output.rhs.val.underlying):
                         case sparse_torch.Matmul:
                             output = build_matmul(op_operands)
                         case sparse_torch.Add:
                             output = build_add(op_operands)
+                        case sparse_torch.Sub:
+                            output = build_sub(op_operands)
                         case sparse_torch.Exp:
                             output = build_exp(op_operands)
                         case sparse_torch.Reduce:
@@ -262,6 +191,7 @@ def process_state(state: State):
                             output = build_div(op_operands)
                         case _:
                             pass
+                    print(op_output, output)
                     tensorToMLIRTensor[op_output] = output
                 return output
         print(module)
