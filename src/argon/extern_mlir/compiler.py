@@ -12,8 +12,10 @@ from mlir.dialects import func
 from mlir.dialects.linalg.opdsl import lang as dsl
 from mlir.dialects.linalg.opdsl.ops.core_named_ops import *
 from mlir.dialects._ods_common import *
-from mlir.dialects import tensor as t
+from mlir.dialects import tensor
 from mlir.dialects import arith
+from mlir.dialects import affine
+from mlir.dialects import linalg
 from mlir.ir import *
 
 from argon.node import sparse_torch
@@ -35,49 +37,156 @@ def matmul_dsl(
     C[dsl.D.m, dsl.D.n] += A[dsl.D.m, dsl.D.k] * B[dsl.D.k, dsl.D.n]
 
 
-def build_matmul(args: List[ir.RankedTensorType]):
-    """Build SpMM kernel.
+@dsl.linalg_structured_op
+def reduce_dsl(
+    A=dsl.TensorDef(dsl.T, dsl.S.M, dsl.S.K),
+    B=dsl.TensorDef(dsl.T, dsl.S.M, dsl.S.N, output=True),
+):
+    pass
+    # C[dsl.D.m, dsl.D.n] += A[dsl.D.m, dsl.D.k] * B[dsl.D.k, dsl.D.n]
 
-    This method generates a linalg op with for matrix multiplication using
-    just the Python API. Effectively, a generic linalg op is constructed
-    that computes C(i,j) += A(i,k) * B(k,j) for annotated matrix A.
-    """
+
+def build_matmul(args: List[ir.RankedTensorType]):
     return matmul(args[0], args[1], outs=[args[2]])
+
+# @linalg_structured_op(op_name="custom_op_name")
+# def reduce_func(I=TensorDef(T, *S.DimList), O=TensorDef(T, *S.DimList[:-1], output=True)):
+#     O[*S.Dimlist[:-1]] += I[*S.DimList]
+
+
+def build_reduce(args: List[ir.RankedTensorType]):
+
+    # t = reduce_func(args[0], outs=[args[1]])
+    inputs = args[0]
+    output = args[1]
+    input_shape = inputs.type.shape
+    output_shape = output.type.shape
+    map0 = affine.AffineMap.get(len(input_shape), 0, [
+                                affine.AffineExpr.get_dim(i) for i in range(len(input_shape))])
+    new_affine_exprs = [affine.AffineExpr.get_dim(
+        i) for i in range(len(input_shape) - 1)]
+    new_affine_exprs.append(affine.AffineExpr.get_constant(0))
+    map1 = affine.AffineMap.get(len(input_shape), 0, new_affine_exprs)
+    indexing_maps = [map0, map1]
+    iterator_types_str = ["parallel" for i in range(len(input_shape) - 1)]
+    iterator_types_str.append("reduction")
+    iterator_types_attr = ArrayAttr.get(
+        [Attribute.parse(f"#linalg.iterator_type<{s}>") for s in iterator_types_str])
+    generic_op = linalg.GenericOp([output.type], [inputs], [
+                                  output], indexing_maps, iterator_types_attr)
+
+    with ir.InsertionPoint(generic_op.regions[0].blocks.append(*[inputs.type.element_type, output.type.element_type])):
+        in_ = generic_op.regions[0].blocks[0].arguments[0]
+        out_ = generic_op.regions[0].blocks[0].arguments[1]
+        red = arith.addf(in_, out_)
+        linalg.YieldOp([red])
+
+    return get_op_result_or_op_results(generic_op)
+
+
+def build_max_reduce(args: List[ir.RankedTensorType]):
+    # i64 = ir.IntegerType.get_signless(64)
+    inputs = args[0]
+    output = args[1]
+    select_output = args[2]
+    input_shape = inputs.type.shape
+    output_shape = output.type.shape
+    map0 = affine.AffineMap.get(len(input_shape), 0, [
+                                affine.AffineExpr.get_dim(i) for i in range(len(input_shape))])
+    new_affine_exprs = [affine.AffineExpr.get_dim(
+        i) for i in range(len(input_shape) - 1)]
+    new_affine_exprs.append(affine.AffineExpr.get_constant(0))
+    map1 = affine.AffineMap.get(len(input_shape), 0, new_affine_exprs)
+    indexing_maps = [map0, map1, map1]
+    iterator_types_str = ["parallel" for i in range(len(input_shape) - 1)]
+    iterator_types_str.append("reduction")
+    iterator_types_attr = ArrayAttr.get(
+        [Attribute.parse(f"#linalg.iterator_type<{s}>") for s in iterator_types_str])
+
+    generic_op = linalg.GenericOp([output.type, select_output.type], [inputs], [
+                                  output, select_output], indexing_maps, iterator_types_attr)
+    with ir.InsertionPoint(generic_op.regions[0].blocks.append(*[inputs.type.element_type, output.type.element_type, select_output.type.element_type])):
+        in_ = generic_op.regions[0].blocks[0].arguments[0]
+        out_ = generic_op.regions[0].blocks[0].arguments[1]
+        out_1 = generic_op.regions[0].blocks[0].arguments[2]
+        index_1 = linalg.IndexOp(len(inputs.type.shape) - 1).result
+        index_1_i64 = arith.IndexCastOp(out_1.type, index_1).result
+        max_f = arith.MaximumFOp(in_, out_).result
+        cmp_f = arith.CmpFOp(arith.CmpFPredicate.OGT, in_, out_).result
+        select = arith.SelectOp(cmp_f, index_1_i64, out_1).result
+        linalg.YieldOp([max_f, select])
+    return get_op_result_or_op_results(generic_op)[0]
 
 
 def build_div(args: List[ir.RankedTensorType]):
-    """Build SpMM kernel.
-
-    This method generates a linalg op with for matrix multiplication using
-    just the Python API. Effectively, a generic linalg op is constructed
-    that computes C(i,j) += A(i,k) * B(k,j) for annotated matrix A.
-    """
     return div(args[0], args[1], outs=[args[2]])
 
 
 def build_add(args: List[ir.RankedTensorType]):
-    """Build SpMM kernel.
-
-    This method generates a linalg op with for matrix multiplication using
-    just the Python API. Effectively, a generic linalg op is constructed
-    that computes C(i,j) += A(i,k) * B(k,j) for annotated matrix A.
-    """
     return add(args[0], args[1], outs=[args[2]])
 
 
 def build_sub(args: List[ir.RankedTensorType]):
-    """Build SpMM kernel.
-
-    This method generates a linalg op with for matrix multiplication using
-    just the Python API. Effectively, a generic linalg op is constructed
-    that computes C(i,j) += A(i,k) * B(k,j) for annotated matrix A.
-    """
     return sub(args[0], args[1], outs=[args[2]])
 
 
-def get_attr(tensor: Tensor):
+def build_exp(args: List[ir.RankedTensorType]):
+    return exp(args[0], outs=[args[1]])
+
+
+def test_build():
+    with ir.Context() as ctx, ir.Location.unknown(ctx):
+        module = ir.Module.create()
+        with ir.InsertionPoint(module.body):
+
+            f32 = ir.F32Type.get()
+            i64 = ir.IntegerType.get_signless(64)
+
+            # Input tensor type
+            tensor_1x10xf32 = ir.RankedTensorType.get([1, 10], f32)
+
+            # Output tensor types
+            tensor_1x1xf32 = ir.RankedTensorType.get([1, 1], f32)
+            tensor_1x1xi64 = ir.RankedTensorType.get([1, 1], i64)
+
+            # Indexing maps
+            map0 = affine.AffineMap.get(4, 0, [affine.AffineDimExpr.get(
+                # (d0, d1, d2, d3) -> (d0, d1)
+                0), affine.AffineDimExpr.get(1)])
+            # (d0, d1, d2, d3) -> (d2)
+            map1 = affine.AffineMap.get(4, 0, [affine.AffineDimExpr.get(2)])
+            # (d0, d1, d2, d3) -> (d3)
+            map2 = affine.AffineMap.get(4, 0, [affine.AffineDimExpr.get(3)])
+
+            # Build the linalg.generic operation
+            generic_op = linalg.GenericOp(
+                [tensor_1x1xf32, tensor_1x1xi64],  # Output operand types
+                [tensor_1x10xf32],                  # Input operand types
+                [tensor_1x1xf32, tensor_1x1xi64],  # Output operand types
+                [map0, map1, map2],                 # Indexing maps
+                ["parallel", "reduction"],           # Iterator types
+                doc=None, library_call=None)
+
+            # Region for the body of the operation
+            with ir.InsertionPoint(generic_op.regions[0].blocks.append()):
+                in_ = generic_op.regions[0].blocks[0].arguments[0]
+                out_ = generic_op.regions[0].blocks[0].arguments[1]
+                out_5 = generic_op.regions[0].blocks[0].arguments[2]
+
+                index_1 = linalg.IndexOp(1).result
+                index_1_i64 = arith.IndexCastOp(i64, index_1).result
+                max_f = arith.MaximumFOp(in_, out_).result
+                cmp_f = arith.CmpFOp(arith.CmpFPredicate.OGT, in_, out_).result
+                select = arith.SelectOp(cmp_f, index_1_i64, out_5).result
+                linalg.YieldOp([max_f, select])
+
+            # Print the generated IR
+            # print(module)
+
+
+def get_attr(val: Tensor):
     level = []
-    tensor_format = tensor.get_format()
+    tensor_format = val.get_format()
     for lvl_format in tensor_format.format():
         if lvl_format == LevelFormat("dense"):
             level.append(st.LevelFormat.dense)
@@ -93,89 +202,69 @@ def process_state(state: State):
     outputs = []
     tensorToMLIRTensor = {}
 
+    # test_build()
+    # exit(0)
+
     with ir.Context() as ctx, ir.Location.unknown():
         f32 = ir.F32Type.get()
-        for symbol in state.scope.symbols:
-            for tensor_input in symbol.rhs.val.underlying.inputs:
-                if tensor_input not in state.scope.symbols:
-                    # TODO: Encode tensor type in Tensor type
-                    # TODO: Figure out how to get order for tensor
-                    attr = get_attr(tensor_input)
-                    mlir_tensor = ir.RankedTensorType.get(
-                        list(tensor_input.get_shape()), f32, attr)
-                    inputs.append(mlir_tensor)
-                    # tensorToMLIRTensor[tensor_input] = mlir_tensor
-                # inputs.append()
-        print(inputs)
         module = ir.Module.create()
         with ir.InsertionPoint(module.body):
             @func.FuncOp.from_py_func()
             def generated_func():
-                for item in state.scope.symbols:
-                    match type(item.rhs.val.underlying):
+                output = None
+                for op_output in state.scope.symbols:
+                    op_operands = []
+                    for tensor_input in op_output.rhs.val.underlying.inputs:
+                        if tensor_input in tensorToMLIRTensor:
+                            op_operands.append(
+                                tensorToMLIRTensor[tensor_input])
+                        else:
+                            attr = get_attr(tensor_input)
+                            tensor_type = ir.RankedTensorType.get(
+                                list(tensor_input.get_shape()), f32, attr)
+                            # TODO: Replace with actual values
+                            mlir_val_tensor = arith.constant(
+                                result=f32, value=0.0)
+                            mlir_tensor = fill(mlir_val_tensor, outs=[
+                                tensor.empty(tensor_type, [])])
+                            tensorToMLIRTensor[tensor_input] = mlir_tensor
+                            op_operands.append(mlir_tensor)
+                    # Create rankedtensortype for output
+                    if op_output in tensorToMLIRTensor:
+                        op_operands.append(tensorToMLIRTensor[op_output])
+                    else:
+                        # If output rankedTensorType does not exist, create an empty op and set the output to that
+                        attr = get_attr(op_output)
+                        tensor_type = ir.RankedTensorType.get(
+                            op_output.get_shape(), f32, attr)
+                        mlir_tensor = tensor.empty(tensor_type, [])
+                        tensorToMLIRTensor[op_output] = mlir_tensor
+                        op_operands.append(mlir_tensor)
+                    if type(op_output.rhs.val.underlying) == sparse_torch.MaxReduce:
+                        i64 = ir.IntegerType.get_signless(64)
+                        i64_select_out = ir.RankedTensorType.get(op_output.get_shape(), i64)
+                        init_tensor = tensor.empty(i64_select_out, [])
+                        const_val = arith.constant(result=i64, value=0)
+                        fill_val = linalg.fill(const_val, outs=[init_tensor])
+                        op_operands.append(fill_val)
+                    match type(op_output.rhs.val.underlying):
                         case sparse_torch.Matmul:
-                            op_input = []
-                            for tensor_input in item.rhs.val.underlying.inputs:
-                                if tensor_input in tensorToMLIRTensor:
-                                    op_input.append(
-                                        tensorToMLIRTensor[tensor_input])
-                                else:
-                                    attr = get_attr(tensor_input)
-                                    tensor_type = ir.RankedTensorType.get(
-                                        list(tensor_input.get_shape()), f32, attr)
-                                    mlir_tensor = arith.constant(tensor_type, DenseElementsAttr.get(
-                                        np.full(tensor_input.get_shape(), 0, np.float32)))
-                                    tensorToMLIRTensor[tensor_input] = mlir_tensor
-                                    op_input.append(mlir_tensor)
-                            # Create rankedtensortype for output
-                            if item in tensorToMLIRTensor:
-                                print("FOUND OP IN TENOSR MLIR")
-                                op_input.append(tensorToMLIRTensor[item])
-                            else:
-                                print("CANNOT FIND OP")
-                                attr = get_attr(item)
-                                # mlir_tensor = ir.RankedTensorType.get(
-                                #     list(item.get_shape()), f32, attr)
-                                # print(mlir_tensor)
-                                # print("GETTING EMPTY OP")
-                                mlir_tensor = get_op_result_or_value(
-                                    t.EmptyOp(item.get_shape(), f32))
-                                tensorToMLIRTensor[item] = mlir_tensor
-                                op_input.append(mlir_tensor)
-
-                            print(op_input)
-                            build_matmul(op_input)
-
-                            ops.append(item.rhs.val.underlying)
-                            inputs.append(item.rhs.val.underlying.inputs)
-                            outputs.append(item)
+                            output = build_matmul(op_operands)
                         case sparse_torch.Add:
-                            level = [st.LevelFormat.dense,
-                                     st.LevelFormat.dense]
-                            ops.append(item.rhs.val.underlying)
-                            inputs.append(item.rhs.val.underlying.inputs)
-                            outputs.append(item)
+                            output = build_add(op_operands)
                         case sparse_torch.Exp:
-                            ops.append(item.rhs.val.underlying)
-                            inputs.append(item.rhs.val.underlying.inputs)
-                            outputs.append(item)
+                            output = build_exp(op_operands)
                         case sparse_torch.Reduce:
-                            ops.append(item.rhs.val.underlying)
-                            inputs.append(item.rhs.val.underlying.inputs)
-                            outputs.append(item)
+                            output = build_reduce(op_operands)
                         case sparse_torch.MaxReduce:
-                            ops.append(item.rhs.val.underlying)
-                            inputs.append(item.rhs.val.underlying.inputs)
-                            outputs.append(item)
+                            output = build_max_reduce(op_operands)
                         case sparse_torch.Div:
-                            ops.append(item.rhs.val.underlying)
-                            inputs.append(item.rhs.val.underlying.inputs)
-                            outputs.append(item)
-
+                            output = build_div(op_operands)
                         case _:
                             pass
-                            print("DEFAULT REACHED")
-            # print(ops)
+                    tensorToMLIRTensor[op_output] = output
+                return output
+        print(module)
 
 
 def main():
@@ -215,7 +304,6 @@ def main():
                         attr = st.EncodingAttr.get(
                             level, ordering, None, pwidth, iwidth
                         )
-                        print(attr)
                         build_matmul(attr, None)
                         count = count + 1
         # CHECK: Passed 8 tests

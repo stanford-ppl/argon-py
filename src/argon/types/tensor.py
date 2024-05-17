@@ -67,25 +67,25 @@ class Tensor[T](Ref[TensorStorage, "Tensor[T]"]):
     def __add__(self, other: "Tensor[T]") -> "Tensor[T]":
         (m0, n0) = self.get_shape()
         (m1, n1) = other.get_shape()
-        assert m0 == m1 and n0 == n1, f"Invalid shapes for element-wise addition with expected signature: (m,n),(m,n)->(m,n) -- actual shape: ({m0}, {n0}), ({m1}, {n1})"
+        assert m0 == m1 or n0 == n1, f"Invalid shapes for element-wise addition with expected signature: (m,n),(m,n)->(m,n) -- actual shape: ({m0}, {n0}), ({m1}, {n1})"
         return stage(sparse_torch.Add[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape())]](self, other), ctx=SrcCtx.new(2))
 
     def __sub__(self, other: "Tensor[T]") -> "Tensor[T]":
         (m0, n0) = self.get_shape()
         (m1, n1) = other.get_shape()
-        assert m0 == m1 and n0 == n1, f"Invalid shapes for element-wise addition with expected signature: (m,n),(m,n)->(m,n) -- actual shape: ({m0}, {n0}), ({m1}, {n1})"
+        assert m0 == m1 or n0 == n1, f"Invalid shapes for element-wise addition with expected signature: (m,n),(m,n)->(m,n) -- actual shape: ({m0}, {n0}), ({m1}, {n1})"
         return stage(sparse_torch.Sub[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape())]](self, other), ctx=SrcCtx.new(2))
 
     def __mul__(self, other: "Tensor[T]") -> "Tensor[T]":
         (m0, n0) = self.get_shape()
         (m1, n1) = other.get_shape()
-        assert m0 == m1 and n0 == n1, f"Invalid shapes for element-wise multiplication with expected signature: (m,n),(m,n)->(m,n) -- actual shape: ({m0}, {n0}), ({m1}, {n1})"
+        assert m0 == m1 or n0 == n1, f"Invalid shapes for element-wise multiplication with expected signature: (m,n),(m,n)->(m,n) -- actual shape: ({m0}, {n0}), ({m1}, {n1})"
         return stage(sparse_torch.Mul[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape())]](self, other), ctx=SrcCtx.new(2))
 
     def __truediv__(self, other: "Tensor[T]") -> "Tensor[T]":
         (m0, n0) = self.get_shape()
         (m1, n1) = other.get_shape()
-        assert m0 == m1 and n0 == n1, f"Invalid shapes for element-wise addition with expected signature: (m,n),(m,n)->(m,n) -- actual shape: ({m0}, {n0}), ({m1}, {n1})"
+        assert m0 == m1 or n0 == n1, f"Invalid shapes for element-wise addition with expected signature: (m,n),(m,n)->(m,n) -- actual shape: ({m0}, {n0}), ({m1}, {n1})"
         return stage(sparse_torch.Div[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape())]](self, other), ctx=SrcCtx.new(2))
     
     def matmul(self, other: "Tensor[T]") -> "Tensor[T]":
@@ -110,10 +110,10 @@ class Tensor[T](Ref[TensorStorage, "Tensor[T]"]):
         return stage(sparse_torch.Exp[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape())]](self))
     
     def reduce(self):
-        return stage(sparse_torch.Reduce[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape())]](self))
+        return stage(sparse_torch.Reduce[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape()[:1]+(1,))]](self))
 
     def max_reduce(self):
-        return stage(sparse_torch.MaxReduce[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape())]](self))
+        return stage(sparse_torch.MaxReduce[Tensor[T := TensorStorage(tensor_format=self.get_format(), shape=self.get_shape()[:1]+(1,))]](self))
     
     def get_shape(self) -> Tuple[int, ...]:
         if type(self.rhs.val) != Const:

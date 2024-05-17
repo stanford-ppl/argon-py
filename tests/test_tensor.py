@@ -12,7 +12,10 @@ def test_matmul_softmax():
             [LevelFormat("compressed"), LevelFormat("compressed")]), (64, 512)))
         v = Tensor().const(TensorStorage(TensorFormat(
             [LevelFormat("compressed"), LevelFormat("compressed")]), (512, 64)))
-        c = q @ k 
+        d = Tensor().const(TensorStorage(TensorFormat(
+            [LevelFormat("compressed"), LevelFormat("compressed")]), (512, 512)))
+        c = q @ k @ v 
+        t = c.max_reduce()
         # d = c.relu()
         # e = (d - d.max_reduce()).exp()
         # f = e / e.reduce()
