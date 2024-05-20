@@ -18,6 +18,14 @@ class FVal:
 
     def __str__(self) -> str:
         return str(self.value)
+    
+E = TypeVar("E")
+@dataclass
+class GVal[E]:
+    value: E
+
+    def __str__(self) -> str:
+        return str(self.value)
 
 T = TypeVar("T")
 class FStream[T](Ref[List[Union[FVal,Stop]], "FStream[T]"]):
@@ -36,31 +44,27 @@ class FStream[T](Ref[List[Union[FVal,Stop]], "FStream[T]"]):
 
         return stage(step.Zip[FStream[T]](self, other), ctx=SrcCtx.new(2))
 
-U = TypeVar("U")
-class UStream[U](Ref[List[Union[FVal,Stop]], "UStream[int]"]):
+I = TypeVar("I")
+class IStream[I](Ref[List[Union[FVal,Stop]], "IStream[int]"]):
 
     @override
-    def fresh(self) -> "UStream[U]":
-        # print(f"print self = {repr(self)}")
-        # print(f"From fresh: {self.T}")
-        
-        # freshobj = fStream(self.rank)
-        # use self to set the corresponding fields for Stream
-        return UStream[self.U]()
+    def fresh(self) -> "IStream[I]":
+        return IStream[self.I]()
 
+
+D = TypeVar("D")
+class DStream[D](Ref[List[D], "DStream[D]"]):
+
+    @override
+    def fresh(self) -> "DStream[D]":
+        return DStream[self.D]()
 
 TP = TypeVar("TP")
-class GStream[TP](Ref[List[TP], "GStream[TP]"]):
+class GStream[TP](Ref[List[Union[GVal[TP],Stop]], "GStream[TP]"]):
 
     @override
     def fresh(self) -> "GStream[TP]":
-        # print(f"print self = {repr(self)}")
-        # print(f"From fresh: {self.T}")
-        
-        # freshobj = fStream(self.rank)
-        # use self to set the corresponding fields for Stream
         return GStream[self.TP]()
-
 
 
 def test_stop_token():
@@ -68,7 +72,7 @@ def test_stop_token():
     print(a)
     assert type(a) == Stop
 
-def test_fixed_tp_stream():
+def test_generic_staged_tp():
     state = State()
     with state:
         a = FStream[int]().const([FVal(1.0),FVal(2.0),Stop(1),FVal(3.0),FVal(4.0),Stop(2)])
@@ -78,41 +82,54 @@ def test_fixed_tp_stream():
         assert a.A().T is int
     print(state)
 
-def test_debug_generic1():
+def test_generic_staged_tp_wo_const():
     state = State()
     with state:
-        a = UStream[str]()
+        a = IStream[str]()
         print(a)
-        assert type(a) is UStream
+        assert type(a) is IStream
         assert a.C == typing.List[typing.Union[FVal,Stop]]
-        assert a.A is UStream[int]
-        assert a.U is str
+        assert a.A is IStream[int]
+        assert a.I is str
     print(state)
 
-def test_debug_generic2():
+def test_generic_staged_tp_w_const():
     state = State()
     with state:
-        a = UStream[str]().const([FVal(1.0),FVal(2.0),Stop(1),FVal(3.0),FVal(4.0),Stop(2)])
+        a = IStream[str]().const([FVal(1.0),FVal(2.0),Stop(1),FVal(3.0),FVal(4.0),Stop(2)])
         # This becomes type A (i.e., UStream[int] because const returns type A)
 
         print(a)                                        # Const([FVal(value=1.0), FVal(value=2.0), Stop(level=1), FVal(value=3.0), FVal(value=4.0), Stop(level=2)])
-        assert type(a) is UStream
+        assert type(a) is IStream
         assert a.C == typing.List[typing.Union[FVal,Stop]]
-        assert a.A is UStream[int]
-        assert a.A().U is int       # -- a.A() is equivalent to UStream[int]()
-        assert a.U is int
+        assert a.A is IStream[int]
+        assert a.A().I is int       # -- a.A() is equivalent to UStream[int]()
+        assert a.I is int
     print(state)
 
 
-def test_gstream():
+def test_generic_denotational_tp():
     state = State()
     with state:
-        a = GStream[int]().const([1,2,3])
-        assert type(a) is GStream
+        a = DStream[int]().const([1,2,3])
+        assert type(a) is DStream
         assert a.C == typing.List[int]
-        assert a.A is GStream[int]
-        assert a.A().TP is int       # -- a.A() is equivalent to UStream[int]()
-        assert a.TP is int
-        
-        print(f"a.C = {a.C}")
+        assert a.A is DStream[int]
+        assert a.A().D is int       # -- a.A() is equivalent to UStream[int]()
+        assert a.D is int
+    print(state)
+
+
+def test_fully_generic_tp():
+    state = State()
+    with state:
+        a = GStream[float]().const([GVal[float](1.0),GVal[float](2.0),Stop(1),GVal[float](3.0),GVal[float](4.0),Stop(2)])
+        # This becomes type A (i.e., UStream[int] because const returns type A)
+
+        print(a)                                        # Const([FVal(value=1.0), FVal(value=2.0), Stop(level=1), FVal(value=3.0), FVal(value=4.0), Stop(level=2)])
+        assert type(a) is GStream
+        assert a.C == typing.List[typing.Union[GVal[float],Stop]]
+        assert a.A is GStream[float]
+        assert a.A().TP is float       # -- a.A() is equivalent to UStream[int]()
+        assert a.TP is float
     print(state)
