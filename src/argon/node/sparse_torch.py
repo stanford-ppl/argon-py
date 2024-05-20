@@ -1,6 +1,8 @@
 import typing
 import pydantic
+from argon.state import State
 from argon.ref import Exp, Op, Sym
+# from argon.extern_mlir.compiler import process_state
 
 # from argon.types.integer import Integer
 from pydantic.dataclasses import dataclass
@@ -69,3 +71,6 @@ class Reduce[T](Unary):
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
 class MaxReduce[T](Unary):
     pass
+
+def compile(state: State):
+    process_state(state)

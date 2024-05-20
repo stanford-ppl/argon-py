@@ -3,7 +3,7 @@ from argon.types.tensor import LevelFormat, TensorStorage, TensorFormat, Tensor
 from argon.extern_mlir.compiler import process_state
 
 
-def test_matmul_softmax():
+def test_dummy_attention():
     state = State()
     with state:
         q = Tensor().const(TensorStorage(TensorFormat(
@@ -14,17 +14,12 @@ def test_matmul_softmax():
             [LevelFormat("compressed"), LevelFormat("compressed")]), (512, 64)))
         d = Tensor().const(TensorStorage(TensorFormat(
             [LevelFormat("compressed"), LevelFormat("compressed")]), (512, 512)))
-        c = q @ k
-        d = c.max_reduce()
-        # d = c.relu()
-        # e = (q - v.max_reduce()).exp()
-        # a = q - v.reduce()
-        # e = a.exp()
-        # e = q.exp()
-        # f = e / e.reduce()
-        # g = f @ v
+        att = q @ k
+        s = att - att.max_reduce()
+        exp = s.exp()
+        div = exp / exp.reduce()
+        qkv = att @ v
+        # qk = qkv + d
 
-        # print(d.get_shape())
-        # print(c.tensor_format())
     print(state)
     process_state(state)

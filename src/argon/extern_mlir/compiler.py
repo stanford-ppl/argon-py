@@ -93,20 +93,87 @@ def build_max_reduce(args: List[ir.RankedTensorType]):
 
 
 def build_div(args: List[ir.RankedTensorType]):
-    return div(args[0], args[1], outs=[args[2]])
+    inputs = [args[0], args[1]]
+    output = args[2]
+    input_shape = [in_val.type.shape for in_val in inputs]
+    output_shape = output.type.shape
+
+    indexing_maps = []
+
+    for in_shape in input_shape:
+        if in_shape[-1] == 1:
+            new_affine_exprs = [affine.AffineExpr.get_dim(i) for i in range(len(input_shape) - 1)]
+            new_affine_exprs.append(affine.AffineExpr.get_constant(0))
+            indexing_maps.append(affine.AffineMap.get(len(input_shape), 0, new_affine_exprs))
+        else:
+            indexing_maps.append(affine.AffineMap.get(len(input_shape), 0, [
+                                        affine.AffineExpr.get_dim(i) for i in range(len(input_shape))]))
+    
+    # Append result map
+    indexing_maps.append(affine.AffineMap.get(len(input_shape), 0, [
+                                affine.AffineExpr.get_dim(i) for i in range(len(input_shape))]))
+
+    iterator_types_str = ["parallel" for i in range(len(input_shape))]
+    iterator_types_attr = ArrayAttr.get(
+        [Attribute.parse(f"#linalg.iterator_type<{s}>") for s in iterator_types_str])
+    generic_op = linalg.GenericOp([output.type], inputs, [
+                                  output], indexing_maps, iterator_types_attr)
+
+    with ir.InsertionPoint(generic_op.regions[0].blocks.append(*[inputs[0].type.element_type, inputs[1].type.element_type, output.type.element_type])):
+        in_ = generic_op.regions[0].blocks[0].arguments[0]
+        out_ = generic_op.regions[0].blocks[0].arguments[1]
+        red = arith.divf(in_, out_)
+        linalg.YieldOp([red])
+    
+    return generic_op
 
 
 def build_add(args: List[ir.RankedTensorType]):
     return add(args[0], args[1], outs=[args[2]])
 
+def to_affine(maps : AffineMap) -> AffineMap:
+    return maps
+    # t = maps.isinstance(AffineMap)
+    # print(t)
+
 
 def build_sub(args: List[ir.RankedTensorType]):
-    print(args)
-    return sub(args[0], args[1], outs=[args[2]])
+    inputs = [args[0], args[1]]
+    output = args[2]
+    input_shape = [in_val.type.shape for in_val in inputs]
+    output_shape = output.type.shape
+
+    indexing_maps = []
+
+    for in_shape in input_shape:
+        if in_shape[-1] == 1:
+            new_affine_exprs = [affine.AffineExpr.get_dim(i) for i in range(len(input_shape) - 1)]
+            new_affine_exprs.append(affine.AffineExpr.get_constant(0))
+            indexing_maps.append(affine.AffineMap.get(len(input_shape), 0, new_affine_exprs))
+        else:
+            indexing_maps.append(affine.AffineMap.get(len(input_shape), 0, [
+                                        affine.AffineExpr.get_dim(i) for i in range(len(input_shape))]))
+    
+    # Append result map
+    indexing_maps.append(affine.AffineMap.get(len(input_shape), 0, [
+                                affine.AffineExpr.get_dim(i) for i in range(len(input_shape))]))
+
+    iterator_types_str = ["parallel" for i in range(len(input_shape))]
+    iterator_types_attr = ArrayAttr.get(
+        [Attribute.parse(f"#linalg.iterator_type<{s}>") for s in iterator_types_str])
+    generic_op = linalg.GenericOp([output.type], inputs, [
+                                  output], indexing_maps, iterator_types_attr)
+
+    with ir.InsertionPoint(generic_op.regions[0].blocks.append(*[inputs[0].type.element_type, inputs[1].type.element_type, output.type.element_type])):
+        in_ = generic_op.regions[0].blocks[0].arguments[0]
+        out_ = generic_op.regions[0].blocks[0].arguments[1]
+        red = arith.subf(in_, out_)
+        linalg.YieldOp([red])
+    
+    return generic_op
 
 
 def build_exp(args: List[ir.RankedTensorType]):
-    print(args)
     return exp(args[0], outs=[args[1]])
 
 
@@ -137,8 +204,8 @@ def process_state(state: State):
                     result=f32, value=0.0)
                 zero_i = arith.constant(
                     result=i64, value=0)
-                max_num = arith.FloatAttr.get_f32(float("inf"))
-                max_const = arith.constant(result=f32, value=max_num)
+                max_const = arith.constant(
+                    result=f32, value=arith.FloatAttr.get_f32(float("-inf")))
                 for op_output in state.scope.symbols:
                     op_operands = []
                     for tensor_input in op_output.rhs.val.underlying.inputs:
@@ -191,7 +258,9 @@ def process_state(state: State):
                             output = build_div(op_operands)
                         case _:
                             pass
-                    print(op_output, output)
+                    # print()
+                    # print(op_output, output)
+                    # print()
                     tensorToMLIRTensor[op_output] = output
                 return output
         print(module)
