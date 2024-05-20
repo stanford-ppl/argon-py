@@ -4,6 +4,29 @@ import types
 
 from argon.errors import ArgonError
 
+# This is a function to recursively resolve arguments that are instances of the GenericAlias type
+def r_resolve(globalns, localns, rarg):
+    match rarg:
+        case typing.TypeVar():
+            if isinstance(globalns[rarg.__name__], type) and isinstance(localns[rarg.__name__], type):
+                return localns[rarg.__name__]
+            else:
+                raise ArgonError(
+                    f"Failed to resolve type {rarg}: All the type variables should have been resolved in advance"
+                ) 
+        case type():
+            # print(f"in type(): {rarg}")
+            return rarg
+        case typing._GenericAlias():
+            inner_arg_list=[]
+            for inner_rarg in typing.get_args(rarg):
+                inner_arg_list.append(r_resolve(globalns, localns, inner_rarg))
+            return typing.GenericAlias(typing.get_origin(rarg), tuple(inner_arg_list))
+        case _:
+            raise ArgonError(
+                f"Failed to resolve type {rarg}"
+            )     
+                  
 
 ### WARNING: This does not correctly handle shadowing of typevars -- every type parameter should be unique.
 class ArgonMeta:
@@ -35,41 +58,32 @@ class ArgonMeta:
             if isinstance(base, typing._GenericAlias):  # type: ignore -- We don't have a great alternative way for checking if an object is a GenericAlias
                 parent_params = typing.get_origin(base).__type_params__
                 parent_args = typing.get_args(base)
-
                 for param, arg in zip(parent_params, parent_args):
 
-                    print(param, arg, cls)
                     match arg:
                         case typing.TypeVar():
-                            print("arg is TypeVar")
-                            def accessor_override(self, arg=arg):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs   
-                                print("accessor_override: arg is TypeVar")
+
+                            def accessor_override(self, arg=arg):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs
                                 if hasattr(self, arg.__name__):
                                     return getattr(self, arg.__name__)
                                 raise ArgonError(f"No arg named {arg}")
 
                         case typing.ForwardRef():
-                            print("arg is ForwardRef")
 
                             def accessor_override(self, arg=arg):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs
-                                print("accessor_override: arg is ForwardRef")
-
                                 retval = arg._evaluate(globalns, localns, frozenset())
                                 if isinstance(retval, typing._GenericAlias):
-                                    temp_global = {}
-                                    temp_local = {}
                                     aug_ns = {}
-
                                     for key in tparam_set:
-                                        aug_ns[key] = getattr(self, key)
+                                        if isinstance(globalns[key], typing.TypeVar) and isinstance(localns[key], typing.TypeVar):
+                                            # Resolve the type parameters in this class that hasn't been resolved yet
+                                            aug_ns[key] = getattr(self, key)                                        
 
-                                    temp_global.update(globalns)
-                                    temp_global.update(aug_ns)
+                                    # augment the namespace
+                                    globalns.update(aug_ns)
+                                    localns.update(aug_ns)
 
-                                    temp_local.update(localns)
-                                    temp_local.update(aug_ns)
-
-                                    return arg._evaluate(temp_global, temp_local, frozenset())
+                                    return arg._evaluate(globalns, localns, frozenset())
 
 
                                 if isinstance(retval, typing.TypeVar):
@@ -77,24 +91,31 @@ class ArgonMeta:
                                 return retval
 
                         case type():
-                            print("arg is type")
-                            
+
                             def accessor_override(self, arg=arg, param=param):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs
-                                print("accessor_override: arg is type")
-                                # print(f"type():arg={arg}, param={param}")
                                 # print(f"Retrieving {param} = {arg}")
                                 return arg
-                        
 
                         case typing._GenericAlias():
-                            print("arg is _GenericAlias")
                             
-                            def accessor_override(self, arg=arg, param=param): # type: ignore -- PyRight and other tools falsely report this as conflicting defs
-                                print("accessor_override: arg is _GenericAlias")
-                                # print(f"typing._GenericAlias():arg={arg}, param={param}")
-                                # print(f"Retrieving {param} = {arg}")
-                                return arg
+                            def accessor_override(self, arg=arg): # type: ignore -- PyRight and other tools falsely report this as conflicting defs
+                                
+                                aug_ns = {}
+                                for key in tparam_set:
+                                    if isinstance(globalns[key], typing.TypeVar) and isinstance(localns[key], typing.TypeVar):
+                                        # Resolve the type parameters in this class that hasn't been resolved yet
+                                        aug_ns[key] = getattr(self, key)                                        
 
+                                # augment the namespace
+                                globalns.update(aug_ns)
+                                localns.update(aug_ns)
+                                
+                                # recursively resolve the GenericAlias
+                                arg_list=[]
+                                for arg_i in typing.get_args(arg):
+                                    arg_list.append(r_resolve(globalns, localns, arg_i)) 
+                                return typing.GenericAlias(typing.get_origin(arg), tuple(arg_list))
+                                                                
                         case _:
                             raise ArgonError(
                                 f"Failed to resolve type {param} into a concrete type, got {type(arg)}: {arg}"
@@ -119,9 +140,6 @@ class ArgonMeta:
                 return self.__orig_class__.__args__[ind]
 
             accessor_tparam.__name__ = param_name
-            prop = property(fget=accessor_tparam)
-            # print(prop)
-            setattr(cls, param_name, prop)
-            # print(getattr(cls,param_name))
-        
+            setattr(cls, param_name, property(fget=accessor_tparam))
+            
         return super_init

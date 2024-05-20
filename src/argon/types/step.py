@@ -46,3 +46,16 @@ class UStream[U](Ref[List[Union[FVal,Stop]], "UStream[int]"]):
         # freshobj = fStream(self.rank)
         # use self to set the corresponding fields for Stream
         return UStream[self.U]()
+
+
+TP = TypeVar("TP")
+class GStream[TP](Ref[List[TP], "GStream[TP]"]):
+
+    @override
+    def fresh(self) -> "GStream[TP]":
+        # print(f"print self = {repr(self)}")
+        # print(f"From fresh: {self.T}")
+        
+        # freshobj = fStream(self.rank)
+        # use self to set the corresponding fields for Stream
+        return GStream[self.TP]()
