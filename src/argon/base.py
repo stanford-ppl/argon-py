@@ -21,7 +21,7 @@ def r_resolve(globalns, localns, rarg):
             inner_arg_list=[]
             for inner_rarg in typing.get_args(rarg):
                 inner_arg_list.append(r_resolve(globalns, localns, inner_rarg))
-            return typing.GenericAlias(typing.get_origin(rarg), tuple(inner_arg_list))
+            return typing._GenericAlias(typing.get_origin(rarg), tuple(inner_arg_list))
         case _:
             raise ArgonError(
                 f"Failed to resolve type {rarg}"
@@ -114,7 +114,7 @@ class ArgonMeta:
                                 arg_list=[]
                                 for arg_i in typing.get_args(arg):
                                     arg_list.append(r_resolve(globalns, localns, arg_i)) 
-                                return typing.GenericAlias(typing.get_origin(arg), tuple(arg_list))
+                                return typing._GenericAlias(typing.get_origin(arg), tuple(arg_list))
                                                                 
                         case _:
                             raise ArgonError(
