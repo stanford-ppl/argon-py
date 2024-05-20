@@ -14,6 +14,11 @@ A = typing.TypeVar("A")
 
 
 class ExpType[C, A](ArgonMeta, abc.ABC):
+    """
+    ExpType[C, A] defines the type of an expression with denotational type C, and staged
+    type A. This class should be subclassed to define custom expression types.
+    """
+
     @abc.abstractmethod
     def fresh(self) -> A:
         raise NotImplementedError()
@@ -45,7 +50,7 @@ class ExpType[C, A](ArgonMeta, abc.ABC):
     # is used to instantiate a type.
     def __call__(self, *args: typing.Any, **kwds: typing.Any) -> typing.Any:
         raise NotImplementedError()
-    
+
     @property
     def tp_name(self) -> str:
         return self.__class__.__name__
@@ -56,7 +61,7 @@ class Bound[A]:
     id: int
     def_type: typing.Literal["Bound"] = "Bound"
 
-    def dump(self) -> str:
+    def dump(self, indent_level=0) -> str:
         return str(self)
 
     def __str__(self) -> str:
@@ -69,9 +74,9 @@ class Node[A]:
     underlying: "Op[A]"
     def_type: typing.Literal["Node"] = "Node"
 
-    def dump(self) -> str:
-        return f"x{self.id} = {self.underlying}"
-    
+    def dump(self, indent_level=0) -> str:
+        return f"x{self.id} = {self.underlying.dump(indent_level)}"
+
     def __str__(self) -> str:
         return f"x{self.id}"
 
@@ -81,9 +86,9 @@ class Const[C]:
     value: C
     def_type: typing.Literal["Const"] = "Const"
 
-    def dump(self) -> str:
+    def dump(self, indent_level=0) -> str:
         return str(self)
-    
+
     def __str__(self) -> str:
         return f"Const({self.value})"
 
@@ -92,7 +97,7 @@ class Const[C]:
 class TypeRef:
     def_type: typing.Literal["TypeRef"] = "TypeRef"
 
-    def dump(self) -> str:
+    def dump(self, indent_level=0) -> str:
         return str(self)
 
     def __str__(self) -> str:
@@ -105,16 +110,24 @@ class Def[C, A]:
         discriminator="def_type"
     )
 
-    def dump(self) -> str:
-        return self.val.dump()
-    
+    def dump(self, indent_level=0) -> str:
+        return self.val.dump(indent_level)
+
     def __str__(self) -> str:
         return str(self.val)
 
 
 @dataclass
 class Exp[C, A](ArgonMeta, abc.ABC):
-    """Exp[C, A] defines an expression with denotational type C, and staged type A."""
+    """
+    Exp[C, A] defines an expression with denotational type C, and staged type A. This
+    class should be subclassed to define custom expressions.
+
+        rhs : Optional[Def[C, A]]
+            The definition of the expression.
+        ctx : Optional[SrcCtx]
+            The source context of the expression.
+    """
 
     rhs: typing.Optional[Def[C, A]] = None
     ctx: typing.Optional[SrcCtx] = None
@@ -123,18 +136,18 @@ class Exp[C, A](ArgonMeta, abc.ABC):
     @abc.abstractmethod
     def tp(self) -> ExpType[C, A]:
         raise NotImplementedError()
-    
-    def dump(self, indent_level = 0) -> str:
-        no_indent = '|   ' * indent_level
-        indent = '|   ' * (indent_level + 1)
-        rhs_str = "None" if self.rhs is None else self.rhs.dump()
+
+    def dump(self, indent_level=0) -> str:
+        no_indent = "|   " * indent_level
+        indent = "|   " * (indent_level + 1)
+        rhs_str = "None" if self.rhs is None else self.rhs.dump(indent_level)
         return (
             f"{rhs_str}( \n"
-                f"{indent}tp: {self.tp.tp_name} \n"
-                f"{indent}ctx: {self.ctx} \n"
+            f"{indent}tp: {self.tp.tp_name} \n"
+            f"{indent}ctx: {self.ctx} \n"
             f"{no_indent})"
         )
-    
+
     def __str__(self) -> str:
         return str(self.rhs)
 

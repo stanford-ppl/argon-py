@@ -11,6 +11,15 @@ T = typing.TypeVar("T", bound=Exp[typing.Any, typing.Any], covariant=True)
 
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
 class Add[T](Op[T]):
+    """
+    The Add[T] operation represents an addition operation.
+
+        a : T
+            The first value to add.
+        b : T
+            The second value to add.
+    """
+
     a: T
     b: T
 

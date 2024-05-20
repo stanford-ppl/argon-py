@@ -5,6 +5,10 @@ from argon.state import stage
 
 
 class Integer(Ref[int, "Integer"]):
+    """
+    The Integer class represents an integer value in the Argon language.
+    """
+
     @override
     def fresh(self) -> "Integer":
         return Integer()
