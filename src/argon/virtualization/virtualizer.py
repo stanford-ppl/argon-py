@@ -60,13 +60,13 @@ def get_inputs(scope_symbols: typing.List[Exp[typing.Any, typing.Any]]) -> typin
     # We also want to exclude Mux nodes from the list of inputs
     scope_symbols = [
         symbol for symbol in scope_symbols
-        if isinstance(symbol.rhs.val, Node) and not isinstance(symbol.rhs.val.underlying, Phi)
+        if symbol.rhs != None and isinstance(symbol.rhs.val, Node) and not isinstance(symbol.rhs.val.underlying, Phi)
     ]
 
     # We use a symbol's id instead of just the symbol objects below because symbols
     # are not hashable and Python complains.
     # Create a dictionary mapping IDs to symbols
-    symbol_map = {symbol.rhs.val.id: symbol for symbol in scope_symbols}
+    symbol_map = {symbol.rhs.val.id: symbol for symbol in scope_symbols} # type: ignore -- symbol.rhs.val has already been checked to be a Node
 
     all_symbol_ids = set(symbol_map.keys())
 
@@ -74,9 +74,13 @@ def get_inputs(scope_symbols: typing.List[Exp[typing.Any, typing.Any]]) -> typin
     # minus the set of all symbols defined in this scope
     all_input_ids = set()
     for symbol in scope_symbols:
-        inputs = symbol.rhs.val.underlying.inputs
-        symbol_map.update({input.rhs.val.id: input for input in inputs if isinstance(input.rhs.val, Node)})
-        all_input_ids.update({input.rhs.val.id for input in inputs if isinstance(input.rhs.val, Node)})
+        inputs = symbol.rhs.val.underlying.inputs # type: ignore -- symbol.rhs.val has already been checked to be a Node
+        inputs = [
+            input for input in inputs
+            if input.rhs != None and isinstance(input.rhs.val, Node)
+        ]
+        symbol_map.update({input.rhs.val.id: input for input in inputs}) # type: ignore -- input.rhs.val has already been checked to be a Node
+        all_input_ids.update({input.rhs.val.id for input in inputs}) # type: ignore -- input.rhs.val has already been checked to be a Node
     
     result_ids = all_input_ids - all_symbol_ids
     return [symbol_map[result_id] for result_id in result_ids]
