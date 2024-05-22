@@ -48,6 +48,25 @@ class ArgonMeta:
         # TODO: Make sure that this is actually correct
         super_init = super().__init_subclass__()
 
+        # To handle generic type parameters, we should look them up dynamically at runtime
+        for ind, tparam in enumerate(cls.__type_params__):
+            param_name = tparam.__name__
+            tparam_set.add(param_name)
+            
+
+            #print(f"setting accessor_tparam for {param_name}")
+
+            def accessor_tparam(self, ind=ind):
+                # breakpoint()
+                if not hasattr(self, "__orig_class__"):
+                    raise TypeError(
+                        f"Cannot access type parameter {param_name} of {self.__class__}."
+                    )
+                return self.__orig_class__.__args__[ind]
+
+            accessor_tparam.__name__ = param_name
+            setattr(cls, param_name, property(fget=accessor_tparam))
+            
 
         # However, if the type parameter hole is filled, we should not use the old accessor anymore.
         # For example:
@@ -123,23 +142,5 @@ class ArgonMeta:
                     accessor_override.__name__ = param.__name__
                     setattr(cls, param.__name__, property(fget=accessor_override))
 
-        # To handle generic type parameters, we should look them up dynamically at runtime
-        for ind, tparam in enumerate(cls.__type_params__):
-            param_name = tparam.__name__
-            tparam_set.add(param_name)
-            
-
-            #print(f"setting accessor_tparam for {param_name}")
-
-            def accessor_tparam(self, ind=ind):
-                # breakpoint()
-                if not hasattr(self, "__orig_class__"):
-                    raise TypeError(
-                        f"Cannot access type parameter {param_name} of {self.__class__}."
-                    )
-                return self.__orig_class__.__args__[ind]
-
-            accessor_tparam.__name__ = param_name
-            setattr(cls, param_name, property(fget=accessor_tparam))
-            
+        
         return super_init
