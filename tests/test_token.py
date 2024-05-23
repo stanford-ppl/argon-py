@@ -1,9 +1,9 @@
 from pydantic.dataclasses import dataclass
 from typing import Union, override, List, TypeVar
 from argon.ref import Ref
-from argon.srcctx import SrcCtx
-from argon.state import State, stage
+from argon.state import State
 import typing
+
 
 @dataclass
 class Stop:
@@ -11,15 +11,108 @@ class Stop:
 
     def __str__(self) -> str:
         return f"S{self.level}"
-    
+
+
 @dataclass
 class FVal:
     value: float
 
     def __str__(self) -> str:
         return str(self.value)
-    
+
+
+T = TypeVar("T")
+
+
+class FStream[T](Ref[List[Union[FVal, Stop]], "FStream[T]"]):
+
+    @override
+    def fresh(self) -> "FStream[T]":
+        return FStream[self.T]()  # type: ignore -- PyRight falsely report that it cannot access the type parameter
+
+
+def test_gtparam_in_staged_tp():
+    state = State()
+    with state:
+        a = FStream[int]().const(
+            [FVal(1.0), FVal(2.0), Stop(1), FVal(3.0), FVal(4.0), Stop(2)]
+        )
+        assert a.C == typing.List[typing.Union[FVal, Stop]]
+        assert a.A is FStream[int]
+        assert a.T is int  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
+        assert a.A().T is int  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
+    print(state)
+
+
+I = TypeVar("I")
+
+
+class IStream[I](Ref[List[Union[FVal, Stop]], "IStream[int]"]):
+
+    @override
+    def fresh(
+        self,
+    ) -> (
+        "IStream[int]"
+    ):  # In the function signature of fresh, the return type should be A
+        return IStream[int]()
+
+
+def test_cls_tparam_retrieve():
+    state = State()
+    with state:
+        a = IStream[str]()
+
+        assert type(a) is IStream
+        assert a.C == typing.List[typing.Union[FVal, Stop]]
+        assert a.A is IStream[int]
+        assert a.I is str  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
+    print(state)
+
+
+def test_staged_tp_tparam_retrieve():
+    state = State()
+    with state:
+        a = IStream[str]().const(
+            [FVal(1.0), FVal(2.0), Stop(1), FVal(3.0), FVal(4.0), Stop(2)]
+        )
+        # The becomes A (i.e., IStream[int]) because const returns an instance of type A
+
+        assert type(a) is IStream
+        assert a.C == typing.List[typing.Union[FVal, Stop]]
+        assert a.A is IStream[int]
+        assert a.A().I is int  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
+        # -- a.A() is equivalent to IStream[int]()
+        assert a.I is int  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
+        # As 'a' is now an instance of type A (IStream[int]), the type param 'I' should be int
+    print(state)
+
+
+D = TypeVar("D")
+
+
+class DStream[D](Ref[List[D], "DStream[D]"]):
+
+    @override
+    def fresh(self) -> "DStream[D]":
+        return DStream[self.D]()  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
+
+
+def test_gtparam_in_denotational_tp():
+    state = State()
+    with state:
+        a = DStream[int]().const([1, 2, 3])
+        assert type(a) is DStream
+        assert a.C == typing.List[int]  # THIS IS THE MAIN THING WE WANT TO TEST
+        assert a.A is DStream[int]  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
+        assert a.A().D is int  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
+        assert a.D is int  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
+    print(state)
+
+
 E = TypeVar("E")
+
+
 @dataclass
 class GVal[E]:
     value: E
@@ -27,109 +120,35 @@ class GVal[E]:
     def __str__(self) -> str:
         return str(self.value)
 
-T = TypeVar("T")
-class FStream[T](Ref[List[Union[FVal,Stop]], "FStream[T]"]):
-
-    @override
-    def fresh(self) -> "FStream[T]":
-        # print(f"print self = {repr(self)}")
-        # print(f"From fresh: {self.T}")
-        
-        # freshobj = fStream(self.rank)
-        # use self to set the corresponding fields for Stream
-        return FStream[self.T]()
-    
-    def zip(self, other:"FStream[T]") -> "FStream[T]":
-        import argon.node.step as step
-
-        return stage(step.Zip[FStream[T]](self, other), ctx=SrcCtx.new(2))
-
-I = TypeVar("I")
-class IStream[I](Ref[List[Union[FVal,Stop]], "IStream[int]"]):
-
-    @override
-    def fresh(self) -> "IStream[I]":
-        return IStream[self.I]()
-
-
-D = TypeVar("D")
-class DStream[D](Ref[List[D], "DStream[D]"]):
-
-    @override
-    def fresh(self) -> "DStream[D]":
-        return DStream[self.D]()
 
 TP = TypeVar("TP")
-class GStream[TP](Ref[List[Union[GVal[TP],Stop]], "GStream[TP]"]):
+
+
+class GStream[TP](Ref[List[Union[GVal[TP], Stop]], "GStream[TP]"]):
 
     @override
     def fresh(self) -> "GStream[TP]":
-        return GStream[self.TP]()
-
-
-def test_stop_token():
-    a = Stop(1)
-    print(a)
-    assert type(a) == Stop
-
-def test_generic_staged_tp():
-    state = State()
-    with state:
-        a = FStream[int]().const([FVal(1.0),FVal(2.0),Stop(1),FVal(3.0),FVal(4.0),Stop(2)])
-        assert a.C == typing.List[typing.Union[FVal,Stop]]
-        assert a.A is FStream[int]
-        assert a.T is int
-        assert a.A().T is int
-    print(state)
-
-def test_generic_staged_tp_wo_const():
-    state = State()
-    with state:
-        a = IStream[str]()
-        print(a)
-        assert type(a) is IStream
-        assert a.C == typing.List[typing.Union[FVal,Stop]]
-        assert a.A is IStream[int]
-        assert a.I is str
-    print(state)
-
-def test_generic_staged_tp_w_const():
-    state = State()
-    with state:
-        a = IStream[str]().const([FVal(1.0),FVal(2.0),Stop(1),FVal(3.0),FVal(4.0),Stop(2)])
-        # This becomes type A (i.e., UStream[int] because const returns type A)
-
-        print(a)                                        # Const([FVal(value=1.0), FVal(value=2.0), Stop(level=1), FVal(value=3.0), FVal(value=4.0), Stop(level=2)])
-        assert type(a) is IStream
-        assert a.C == typing.List[typing.Union[FVal,Stop]]
-        assert a.A is IStream[int]
-        assert a.A().I is int       # -- a.A() is equivalent to UStream[int]()
-        assert a.I is int
-    print(state)
-
-
-def test_generic_denotational_tp():
-    state = State()
-    with state:
-        a = DStream[int]().const([1,2,3])
-        assert type(a) is DStream
-        assert a.C == typing.List[int]
-        assert a.A is DStream[int]
-        assert a.A().D is int       # -- a.A() is equivalent to UStream[int]()
-        assert a.D is int
-    print(state)
+        return GStream[self.TP]()  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
 
 
 def test_fully_generic_tp():
     state = State()
     with state:
-        a = GStream[float]().const([GVal[float](1.0),GVal[float](2.0),Stop(1),GVal[float](3.0),GVal[float](4.0),Stop(2)])
-        # This becomes type A (i.e., UStream[int] because const returns type A)
+        a = GStream[float]().const(
+            [
+                GVal[float](1.0),
+                GVal[float](2.0),
+                Stop(1),
+                GVal[float](3.0),
+                GVal[float](4.0),
+                Stop(2),
+            ]
+        )
+        # This becomes type A (i.e., GStream[int]) because const returns an instance of type A
 
-        print(a)                                        # Const([FVal(value=1.0), FVal(value=2.0), Stop(level=1), FVal(value=3.0), FVal(value=4.0), Stop(level=2)])
         assert type(a) is GStream
-        assert a.C == typing.List[typing.Union[GVal[float],Stop]]
+        assert a.C == typing.List[typing.Union[GVal[float], Stop]]
         assert a.A is GStream[float]
-        assert a.A().TP is float       # -- a.A() is equivalent to UStream[int]()
-        assert a.TP is float
+        assert a.A().TP is float  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
+        assert a.TP is float  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
     print(state)
