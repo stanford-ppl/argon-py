@@ -31,7 +31,7 @@ class FStream[T](Ref[List[Union[FVal, Stop]], "FStream[T]"]):
         return FStream[self.T]()  # type: ignore -- PyRight falsely report that it cannot access the type parameter
 
 
-def test_gtparam_in_staged_tp():
+def test_tparam_in_staged_tp():
     state = State()
     with state:
         a = FStream[int]().const(
