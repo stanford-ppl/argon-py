@@ -3,10 +3,11 @@ from typing import Union, override, List, TypeVar
 from argon.ref import Ref
 from argon.state import State
 import typing
+from argon.base import ArgonMeta
 
 
 @dataclass
-class Stop:
+class Stop(ArgonMeta):
     level: int
 
     def __str__(self) -> str:
@@ -14,7 +15,7 @@ class Stop:
 
 
 @dataclass
-class FVal:
+class FVal(ArgonMeta):
     value: float
 
     def __str__(self) -> str:
@@ -24,14 +25,15 @@ class FVal:
 T = TypeVar("T")
 
 
-class FStream[T](Ref[List[Union[FVal, Stop]], "FStream[T]"]):
+# If you want to use a genericalias "that takes in at least one non built-in class" as a denotational type, you need to make it a forward reference
+class FStream[T](Ref["List[Union[FVal, Stop]]", "FStream[T]"]):
 
     @override
     def fresh(self) -> "FStream[T]":
         return FStream[self.T]()  # type: ignore -- PyRight falsely report that it cannot access the type parameter
 
 
-def test_gtparam_in_staged_tp():
+def test_tparam_in_staged_tp():
     state = State()
     with state:
         a = FStream[int]().const(
@@ -47,7 +49,7 @@ def test_gtparam_in_staged_tp():
 I = TypeVar("I")
 
 
-class IStream[I](Ref[List[Union[FVal, Stop]], "IStream[int]"]):
+class IStream[I](Ref["List[Union[FVal, Stop]]", "IStream[int]"]):
 
     @override
     def fresh(
@@ -124,7 +126,7 @@ class GVal[E]:
 TP = TypeVar("TP")
 
 
-class GStream[TP](Ref[List[Union[GVal[TP], Stop]], "GStream[TP]"]):
+class GStream[TP](Ref["List[Union[GVal[TP], Stop]]", "GStream[TP]"]):
 
     @override
     def fresh(self) -> "GStream[TP]":
