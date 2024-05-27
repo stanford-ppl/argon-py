@@ -74,11 +74,7 @@ class ArgonMeta:
                                 if isinstance(retval, typing._GenericAlias):  # type: ignore -- We don't have a great alternative way for checking if an object is a GenericAlias
                                     aug_ns = {}
                                     for key in tparam_set:
-                                        if isinstance(
-                                            globalns[key], typing.TypeVar
-                                        ) and isinstance(localns[key], typing.TypeVar):
-                                            # Resolve the type parameters in this class that hasn't been resolved yet
-                                            aug_ns[key] = getattr(self, key)
+                                        aug_ns[key] = getattr(self, key)
 
                                     # augment the namespace
                                     temp_globalns = {}
@@ -108,11 +104,7 @@ class ArgonMeta:
 
                                 aug_ns = {}
                                 for key in tparam_set:
-                                    if isinstance(
-                                        globalns[key], typing.TypeVar
-                                    ) and isinstance(localns[key], typing.TypeVar):
-                                        # Resolve the type parameters in this class that hasn't been resolved yet
-                                        aug_ns[key] = getattr(self, key)
+                                    aug_ns[key] = getattr(self, key)
 
                                 # augment the namespace
                                 temp_globalns = {}
