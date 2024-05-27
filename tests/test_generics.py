@@ -154,6 +154,29 @@ def test_fully_generic_tp():
     print(state)
 
 
+def test_fully_generic_tp_int():
+    state = State()
+    with state:
+        b = GStream[int]().const(
+            [
+                GVal[int](1),
+                GVal[int](2),
+                Stop(1),
+                GVal[int](3),
+                GVal[int](4),
+                Stop(2),
+            ]
+        )
+        # This becomes type A (i.e., GStream[int]) because const returns an instance of type A
+
+        assert type(b) is GStream
+        assert b.C == typing.List[typing.Union[GVal[int], Stop]]
+        assert b.A is GStream[int]
+        assert b.A().TP is int  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
+        assert b.TP is int  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
+    print(state)
+
+
 # Create a case where the parent and class share the same type parameters
 class TPStream[TP](Ref[List[Union[GVal[TP], Stop]], GStream[List[TP]]]):
     @override

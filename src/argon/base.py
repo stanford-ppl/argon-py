@@ -99,10 +99,16 @@ class ArgonMeta:
                                             aug_ns[key] = getattr(self, key)
 
                                     # augment the namespace
-                                    globalns.update(aug_ns)
-                                    localns.update(aug_ns)
+                                    temp_globalns = {}
+                                    temp_localns = {}
+                                    temp_globalns.update(globalns)
+                                    temp_globalns.update(aug_ns)
+                                    temp_localns.update(localns)
+                                    temp_localns.update(aug_ns)
 
-                                    return arg._evaluate(globalns, localns, frozenset())
+                                    return arg._evaluate(
+                                        temp_globalns, temp_localns, frozenset()
+                                    )
 
                                 if isinstance(retval, typing.TypeVar):
                                     return getattr(self, retval.__name__)
@@ -127,13 +133,19 @@ class ArgonMeta:
                                         aug_ns[key] = getattr(self, key)
 
                                 # augment the namespace
-                                globalns.update(aug_ns)
-                                localns.update(aug_ns)
+                                temp_globalns = {}
+                                temp_localns = {}
+                                temp_globalns.update(globalns)
+                                temp_globalns.update(aug_ns)
+                                temp_localns.update(localns)
+                                temp_localns.update(aug_ns)
 
                                 # recursively resolve the GenericAlias
                                 arg_list = []
                                 for arg_i in typing.get_args(arg):
-                                    arg_list.append(r_resolve(globalns, localns, arg_i))
+                                    arg_list.append(
+                                        r_resolve(temp_globalns, temp_localns, arg_i)
+                                    )
                                 return typing._GenericAlias(  # type: ignore -- We don't have a great alternative way for generating an object that is a GenericAlias
                                     typing.get_origin(arg), tuple(arg_list)
                                 )
