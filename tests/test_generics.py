@@ -177,14 +177,29 @@ def test_fully_generic_tp_int():
     print(state)
 
 
-# Create a case where the parent and class share the same type parameters
-class TPStream[TP](Ref[List[Union[GVal[TP], Stop]], GStream[List[TP]]]):
+TP1 = TypeVar("TP1")
+
+
+class TPStream[TP1](Ref[List[Union[GVal[TP1], Stop]], GStream[List[TP1]]]):
     @override
-    def fresh(self) -> GStream[List[TP]]:
-        return GStream[List[TP]]()  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
+    def fresh(self) -> GStream[List[TP1]]:
+        return GStream[List[TP1]]()
+
+
+def test_stream_as_staged_type():
+    # type: ignore -- PyRight falsely reports that it cannot access the type parameter
+
+    assert TPStream[int]().TP1 is int  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
+    assert TPStream[int]().const([GVal[int](3), Stop(1)]).TP1 == List[int]  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
+    # note: The return type of TPStream[int]().const([GVal[int](3), Stop(1)]) is the staged type of the class which is, GStream[List[TP]]]
+
+
+# Create a case where the parent and class share the same type parameters
+class ChildStream[TP](GStream[List[TP]]):
+    @override
+    def fresh(self) -> "ChildStream[TP]":
+        return ChildStream[self.TP]()  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
 
 
 def test_parent_child_t_param():
-    assert TPStream[int]().TP is int  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
-    assert TPStream[int]().const([GVal[int](3), Stop(1)]).TP == List[int]  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
-    # note: The return type of TPStream[int]().const([GVal[int](3), Stop(1)]) is the staged type of the class which is, GStream[List[TP]]]
+    assert ChildStream[int]().TP is int  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
