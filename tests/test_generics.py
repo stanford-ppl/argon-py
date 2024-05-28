@@ -190,7 +190,7 @@ def test_stream_as_staged_type():
     # type: ignore -- PyRight falsely reports that it cannot access the type parameter
 
     assert TPStream[int]().TP1 is int  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
-    assert TPStream[int]().const([GVal[int](3), Stop(1)]).TP1 == List[int]  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
+    assert TPStream[int]().const([GVal[int](3), Stop(1)]).TP == List[int]  # type: ignore -- PyRight falsely reports that it cannot access the type parameter
     # note: The return type of TPStream[int]().const([GVal[int](3), Stop(1)]) is the staged type of the class which is, GStream[List[TP]]]
 
 
