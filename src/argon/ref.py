@@ -23,15 +23,17 @@ class ExpType[C, A](ArgonMeta, abc.ABC):
     def fresh(self) -> A:
         raise NotImplementedError()
 
-    def _new(self, d: "Def[C, A]", ctx: SrcCtx) -> A:
+    def _new(self, d: "Def[C, A]", ctx: SrcCtx) -> A:  # type: ignore -- Pyright falsely detects C and A as abstractproperty instead of type variables
         right_type = typing.cast(type, self.A)
+
         empty_val: Ref = typing.cast(Ref, right_type().fresh())
+
         empty_val.rhs = d
         empty_val.ctx = ctx
-        return typing.cast(A, empty_val)
+        return typing.cast(A, empty_val)  # type: ignore -- Pyright falsely reports the type is not compatible with the return type
 
     def const(self, c: C) -> A:
-        return self._new(Def(Const(c)), SrcCtx.new(2))
+        return self._new(Def(Const(c)), SrcCtx.new(2))  # type: ignore -- Pyright falsely reports the type is not compatible with the return type
 
     # A, C shims are used to silence typing errors -- their actual definitions are provided by ArgonMeta
     @abc.abstractproperty

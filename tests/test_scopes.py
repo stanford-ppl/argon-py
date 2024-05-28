@@ -11,6 +11,7 @@ def test_scope():
         b = Integer().const(6)
         c = a + b
         d = c + b
+    print(state)
 
     print(f"\ntest_scope")
     print(state)
