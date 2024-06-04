@@ -32,6 +32,13 @@ class ExpType[C, A](ArgonMeta, abc.ABC):
         empty_val.ctx = ctx
         return typing.cast(A, empty_val)  # type: ignore -- Pyright falsely reports the type is not compatible with the return type
 
+    def bound(self, name: str) -> A:
+        from argon.state import State
+
+        return self._new(
+            Def(Bound(State.get_current_state().next_id(), name)), SrcCtx.new(2)
+        )
+
     def const(self, c: C) -> A:
         return self._new(Def(Const(c)), SrcCtx.new(2))  # type: ignore -- Pyright falsely reports the type is not compatible with the return type
 
@@ -57,13 +64,14 @@ class ExpType[C, A](ArgonMeta, abc.ABC):
 @dataclass
 class Bound[A]:
     id: int
+    name: str
     def_type: typing.Literal["Bound"] = "Bound"
 
     def dump(self, indent_level=0) -> str:
-        return str(self)
+        return f"b{self.id} = Bound('{self.name}')"
 
     def __str__(self) -> str:
-        return f"Bound({self.id})"
+        return f"b{self.id}"
 
 
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
