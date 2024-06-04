@@ -9,9 +9,7 @@ from argon.errors import ArgonError
 def r_resolve(globalns, localns, rarg):
     match rarg:
         case typing.TypeVar():
-            if isinstance(globalns[rarg.__name__], type) and isinstance(
-                localns[rarg.__name__], type
-            ):
+            if rarg.__name__ in globalns and rarg.__name__ in localns:
                 return localns[rarg.__name__]
             else:
                 raise ArgonError(
@@ -48,24 +46,6 @@ class ArgonMeta:
         # TODO: Make sure that this is actually correct
         super_init = super().__init_subclass__()
 
-        # To handle generic type parameters, we should look them up dynamically at runtime
-        for ind, tparam in enumerate(cls.__type_params__):
-            param_name = tparam.__name__
-            tparam_set.add(param_name)
-
-            # print(f"setting accessor_tparam for {param_name}")
-
-            def accessor_tparam(self, ind=ind):
-                # breakpoint()
-                if not hasattr(self, "__orig_class__"):
-                    raise TypeError(
-                        f"Cannot access type parameter {param_name} of {self.__class__}."
-                    )
-                return self.__orig_class__.__args__[ind]
-
-            accessor_tparam.__name__ = param_name
-            setattr(cls, param_name, property(fget=accessor_tparam))
-
         # However, if the type parameter hole is filled, we should not use the old accessor anymore.
         # For example:
         # class Parent[T]: pass
@@ -92,17 +72,19 @@ class ArgonMeta:
                                 if isinstance(retval, typing._GenericAlias):  # type: ignore -- We don't have a great alternative way for checking if an object is a GenericAlias
                                     aug_ns = {}
                                     for key in tparam_set:
-                                        if isinstance(
-                                            globalns[key], typing.TypeVar
-                                        ) and isinstance(localns[key], typing.TypeVar):
-                                            # Resolve the type parameters in this class that hasn't been resolved yet
-                                            aug_ns[key] = getattr(self, key)
+                                        aug_ns[key] = getattr(self, key)
 
                                     # augment the namespace
-                                    globalns.update(aug_ns)
-                                    localns.update(aug_ns)
+                                    temp_globalns = {}
+                                    temp_localns = {}
+                                    temp_globalns.update(globalns)
+                                    temp_globalns.update(aug_ns)
+                                    temp_localns.update(localns)
+                                    temp_localns.update(aug_ns)
 
-                                    return arg._evaluate(globalns, localns, frozenset())
+                                    return arg._evaluate(
+                                        temp_globalns, temp_localns, frozenset()
+                                    )
 
                                 if isinstance(retval, typing.TypeVar):
                                     return getattr(self, retval.__name__)
@@ -119,21 +101,26 @@ class ArgonMeta:
                             def accessor_parent_tparam(self, arg=arg):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs
 
                                 aug_ns = {}
+                                print(tparam_set)
                                 for key in tparam_set:
-                                    if isinstance(
-                                        globalns[key], typing.TypeVar
-                                    ) and isinstance(localns[key], typing.TypeVar):
-                                        # Resolve the type parameters in this class that hasn't been resolved yet
-                                        aug_ns[key] = getattr(self, key)
+                                    aug_ns[key] = getattr(self, key)
+                                    print(aug_ns[key])
 
                                 # augment the namespace
-                                globalns.update(aug_ns)
-                                localns.update(aug_ns)
+                                temp_globalns = {}
+                                temp_localns = {}
+                                temp_globalns.update(globalns)
+                                temp_globalns.update(aug_ns)
+                                temp_localns.update(localns)
+                                temp_localns.update(aug_ns)
 
                                 # recursively resolve the GenericAlias
                                 arg_list = []
+                                print(typing.get_args(arg))
                                 for arg_i in typing.get_args(arg):
-                                    arg_list.append(r_resolve(globalns, localns, arg_i))
+                                    arg_list.append(
+                                        r_resolve(temp_globalns, temp_localns, arg_i)
+                                    )
                                 return typing._GenericAlias(  # type: ignore -- We don't have a great alternative way for generating an object that is a GenericAlias
                                     typing.get_origin(arg), tuple(arg_list)
                                 )
@@ -149,8 +136,6 @@ class ArgonMeta:
         for ind, tparam in enumerate(cls.__type_params__):
             param_name = tparam.__name__
             tparam_set.add(param_name)
-
-            # print(f"setting accessor_tparam for {param_name}")
 
             def accessor_override(self, ind=ind):
                 if not hasattr(self, "__orig_class__"):
