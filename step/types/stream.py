@@ -31,7 +31,7 @@ class Stream[ST,SRK](Ref[List[Union[Val[ST], Stop]], "Stream[ST,SRK]"]):
     def fresh(self) -> "Stream[ST,SRK]":
         return Stream[self.ST, self.SRK]()
     
-    def zip(self, other: "Stream[B,SRK]") -> "Stream[(ST,B),SRK]":
-        import step.ops.zip as zip
+    # def zip(self, other: "Stream[B,SRK]") -> "Stream[(ST,B),SRK]":
+    #     import step.ops.zip as zip
         
-        return stage(zip.Zip[ST,B,SRK](self, other), ctx=SrcCtx.new(2))
+    #     return stage(zip.Zip[ST,B,SRK](self, other), ctx=SrcCtx.new(2))
