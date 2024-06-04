@@ -3,7 +3,7 @@ import typing
 
 from argon.block import Block
 from argon.node.control import IfThenElse
-from argon.node.mux import Mux
+from argon.node.phi import Phi
 from argon.ref import Exp, Node, Ref
 from argon.srcctx import SrcCtx
 from argon.state import State, stage
@@ -11,14 +11,14 @@ from argon.types.boolean import Boolean
 from argon.types.null import Null
 
 
-def stage_mux(
+def stage_phi(
     cond: Boolean,
     a: Exp[typing.Any, typing.Any],
     b: Exp[typing.Any, typing.Any],
 ) -> Ref[typing.Any, typing.Any]:
     if a.tp.A != b.tp.A:
         raise TypeError(f"Type mismatch: {a.tp.A} != {b.tp.A}")
-    return stage(Mux[a.tp.A](cond, a, b), ctx=SrcCtx.new(2))
+    return stage(Phi[a.tp.A](cond, a, b), ctx=SrcCtx.new(2))
 
 
 def stage_if_exp_with_scopes(
@@ -60,13 +60,13 @@ def get_inputs(scope_symbols: typing.List[Exp[typing.Any, typing.Any]]) -> typin
     # We also want to exclude Mux nodes from the list of inputs
     scope_symbols = [
         symbol for symbol in scope_symbols
-        if isinstance(symbol.rhs.val, Node) and not isinstance(symbol.rhs.val.underlying, Mux)
+        if symbol.rhs != None and isinstance(symbol.rhs.val, Node) and not isinstance(symbol.rhs.val.underlying, Phi)
     ]
 
     # We use a symbol's id instead of just the symbol objects below because symbols
     # are not hashable and Python complains.
     # Create a dictionary mapping IDs to symbols
-    symbol_map = {symbol.rhs.val.id: symbol for symbol in scope_symbols}
+    symbol_map = {symbol.rhs.val.id: symbol for symbol in scope_symbols} # type: ignore -- symbol.rhs.val has already been checked to be a Node
 
     all_symbol_ids = set(symbol_map.keys())
 
@@ -74,9 +74,13 @@ def get_inputs(scope_symbols: typing.List[Exp[typing.Any, typing.Any]]) -> typin
     # minus the set of all symbols defined in this scope
     all_input_ids = set()
     for symbol in scope_symbols:
-        inputs = symbol.rhs.val.underlying.inputs
-        symbol_map.update({input.rhs.val.id: input for input in inputs if isinstance(input.rhs.val, Node)})
-        all_input_ids.update({input.rhs.val.id for input in inputs if isinstance(input.rhs.val, Node)})
+        inputs = symbol.rhs.val.underlying.inputs # type: ignore -- symbol.rhs.val has already been checked to be a Node
+        inputs = [
+            input for input in inputs
+            if input.rhs != None and isinstance(input.rhs.val, Node)
+        ]
+        symbol_map.update({input.rhs.val.id: input for input in inputs}) # type: ignore -- input.rhs.val has already been checked to be a Node
+        all_input_ids.update({input.rhs.val.id for input in inputs}) # type: ignore -- input.rhs.val has already been checked to be a Node
     
     result_ids = all_input_ids - all_symbol_ids
     return [symbol_map[result_id] for result_id in result_ids]
@@ -185,7 +189,7 @@ except NameError:
 
         # Run the then body under a different scope
         then_scope_name = self.generate_temp_var("then", "scope")
-        new_body.extend(ast.parse(f"{then_scope_name} = state.new_scope()").body)
+        new_body.extend(ast.parse(f"{then_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()").body)
         new_body.append(
             ast.With(
                 items=[
@@ -224,7 +228,7 @@ except NameError:
         # Run the else body under a different scope
         else_scope_name = self.generate_temp_var("else", "scope")
         if node.orelse:
-            new_body.extend(ast.parse(f"{else_scope_name} = state.new_scope()").body)
+            new_body.extend(ast.parse(f"{else_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()").body)
             new_body.append(
                 ast.With(
                     items=[
@@ -275,7 +279,7 @@ except NameError:
             temp_var_T = self.generate_temp_var(var, "T")
             new_body.extend(
                 ast.parse(
-                    f"{var} = __________argon.argon.virtualization.virtualizer.stage_mux({temp_var_cond}, {temp_var_then}({temp_var_T}), {temp_var_else}({temp_var_T}))"
+                    f"{var} = __________argon.argon.virtualization.virtualizer.stage_phi({temp_var_cond}, {temp_var_then}({temp_var_T}), {temp_var_else}({temp_var_T}))"
                 ).body
             )
 

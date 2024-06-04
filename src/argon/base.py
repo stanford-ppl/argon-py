@@ -104,7 +104,6 @@ class ArgonMeta:
                                 print(tparam_set)
                                 for key in tparam_set:
                                     aug_ns[key] = getattr(self, key)
-                                    print(aug_ns[key])
 
                                 # augment the namespace
                                 temp_globalns = {}

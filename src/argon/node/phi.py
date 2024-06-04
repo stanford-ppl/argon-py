@@ -8,10 +8,9 @@ from argon.types.boolean import Boolean
 
 
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
-class Mux[T](Op[T]):
+class Phi[T](Op[T]):
     """
-    The Mux[T] operation represents a multiplexer that selects between two values
-    based on a condition.
+    The Phi[T] operation selects a value based on a condition.
 
         cond : Boolean
             The condition that determines which value to select.
