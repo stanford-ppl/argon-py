@@ -249,10 +249,10 @@ def get_attr(val: Tensor):
     level = []
     tensor_format = val.get_format()
     for lvl_format in tensor_format.format():
-        if lvl_format == LevelFormat(Format.DENSE):
-            level.append(st.LevelFormat.dense)
-        elif lvl_format == LevelFormat(Format.COMPRESSED):
+        if lvl_format == LevelFormat(Format.COMPRESSED):
             level.append(st.LevelFormat.compressed)
+        else:
+            level.append(st.LevelFormat.dense)
     ordering = ir.AffineMap.get_permutation([0, 1])
     return st.EncodingAttr.get(level, ordering, None, 0, 0)
 
