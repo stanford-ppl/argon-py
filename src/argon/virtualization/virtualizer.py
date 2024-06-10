@@ -1,14 +1,17 @@
 import ast
+import types
 import typing
 
 from argon.block import Block
 from argon.node.control import IfThenElse
+from argon.node.function_call import FunctionCall
 from argon.node.phi import Phi
 from argon.ref import Exp, Node, Ref
 from argon.srcctx import SrcCtx
 from argon.state import State, stage
 from argon.types.boolean import Boolean
 from argon.types.null import Null
+from argon.virtualization.type_mapper import concrete_to_abstract
 
 
 def stage_phi(
@@ -86,14 +89,64 @@ def get_inputs(scope_symbols: typing.List[Exp[typing.Any, typing.Any]]) -> typin
     return [symbol_map[result_id] for result_id in result_ids]
 
 
+def stage_function_call(func: types.FunctionType, args: typing.List[typing.Any]) -> Ref[typing.Any, typing.Any]:
+    white_list = [print] # TODO: Add more whitelisted functions here that we don't want to stage
+    if func in white_list:
+        return func(*args)
+
+    abstract_args = [concrete_to_abstract(arg) for arg in args]
+    abstract_func = concrete_to_abstract.function(func, abstract_args)
+    return stage(FunctionCall[abstract_func.F](abstract_func, abstract_args), ctx=SrcCtx.new(2))
+
+
 class Transformer(ast.NodeTransformer):
-    def __init__(self):
+    def __init__(self, calls, ifs, if_exps):
         super().__init__()
         self.if_counter = 0
         self.unique_prefix = "__________"
+        self.calls = calls
+        self.ifs = ifs
+        self.if_exps = if_exps
+    
+    # This method is called for function calls
+    def visit_Call(self, node):
+        if not self.calls:
+            return node
+        
+        # Recursively visit arguments
+        self.generic_visit(node)
 
+        # Wrap arguments in a list
+        args_list = ast.List(elts=node.args, ctx=ast.Load())
+
+        # Create the staged function call
+        staged_call = ast.Call(
+            func=ast.Attribute(
+                value=ast.Attribute(
+                    value=ast.Attribute(
+                        value=ast.Attribute(
+                            value=ast.Name(id="__________argon", ctx=ast.Load()),
+                            attr="argon",
+                            ctx=ast.Load()
+                        ),
+                        attr="virtualization",
+                        ctx=ast.Load()
+                    ),
+                    attr="virtualizer",
+                    ctx=ast.Load()
+                ),
+                attr="stage_function_call",
+                ctx=ast.Load()
+            ),
+            args=[node.func, args_list],
+            keywords=[]
+        )
+        return staged_call
+
+    # This method is called for ternary "if" expressions
     def visit_IfExp(self, node):
-        # This method is called for ternary "if" expressions
+        if not self.if_exps:
+            return node
 
         # Recursively visit the condition, the then case, and the else case
         self.generic_visit(node)
@@ -144,8 +197,10 @@ class Transformer(ast.NodeTransformer):
         )
         return func_call
 
+    # This method is called for if/else statements
     def visit_If(self, node):
-        # This method is called for if/else statements
+        if not self.ifs:
+            return node
 
         # Increment counter to ensure unique names for this if statement
         self.if_counter += 1
