@@ -25,6 +25,9 @@ class LevelFormat:
     def __str__(self) -> str:
         return str(self.level_format)
 
+    def format(self):
+        return self.level_format
+
 
 @dataclass(frozen=True)
 class TensorFormat:

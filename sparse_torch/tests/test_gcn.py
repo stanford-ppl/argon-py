@@ -3,14 +3,13 @@ from sparse_torch.extern_mlir.compiler import compile_to_mlir
 from sparse_torch.types.tensor import LevelFormat, TensorStorage, TensorFormat, Tensor, Format
 
 
-def test_dummy_gcn():
+def test_simple_gcn():
     state = ProgramState()
     with state:
         adj1 = Tensor.new(format=[Format.DENSE, Format.COMPRESSED], shape=(512, 512))
         in1 = Tensor.new(format=[Format.DENSE, Format.COMPRESSED], shape=(512, 512))
         w1 = Tensor.new(format=[Format.DENSE, Format.COMPRESSED], shape=(512, 512))
         w2 = Tensor.new(format=[Format.DENSE, Format.COMPRESSED], shape=(512, 512))
-        v = Tensor.new(format=[Format.COMPRESSED, Format.COMPRESSED], shape=(512, 512))
 
         out = adj1 @ in1
         out = w1 @ out
