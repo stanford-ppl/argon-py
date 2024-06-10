@@ -103,7 +103,7 @@ from sparse_torch.types.tensor import *
 from sparse_torch.node import sparse_torch 
 from sparse_torch.state import ProgramState
 
-def test_dummy_gcn():
+def test_simple_gcn():
     state = ProgramState()
     with state:
         adj1 = Tensor.new(format=[Format.DENSE, Format.COMPRESSED], shape=(512, 512))
