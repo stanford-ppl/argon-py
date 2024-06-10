@@ -68,7 +68,7 @@ State(
 ```
 It should also produce the generated MLIR IR representation for this test:
 ```
-#sparse = #sparse_tensor.encoding<{ map = (d0, d1) -> (d0 : dense, d1 : dense) }>
+#sparse = #sparse_tensor.encoding<{ map = (d0, d1) -> (d0 : compressed, d1 : compressed) }>
 module {
   func.func @generated_func() -> tensor<10x10xf32, #sparse> {
     %cst = arith.constant 0.000000e+00 : f32
