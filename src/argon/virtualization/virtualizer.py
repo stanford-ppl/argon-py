@@ -236,7 +236,7 @@ try:
     {temp_var} = lambda _, {var} = {var}: {var}
     {temp_var_exists} = True
 except NameError:
-    {temp_var} = lambda T : stage(__________argon.argon.node.undefined.Undefined[T]("{var}"))
+    {temp_var} = lambda T : __________argon.argon.state.stage(__________argon.argon.node.undefined.Undefined[T]("{var}"))
     {temp_var_exists} = False
 """
                 ).body
