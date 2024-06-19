@@ -9,9 +9,7 @@ from argon.errors import ArgonError
 def r_resolve(globalns, localns, rarg):
     match rarg:
         case typing.TypeVar():
-            if isinstance(globalns[rarg.__name__], type) and isinstance(
-                localns[rarg.__name__], type
-            ):
+            if rarg.__name__ in globalns and rarg.__name__ in localns:
                 return localns[rarg.__name__]
             else:
                 raise ArgonError(
@@ -103,6 +101,7 @@ class ArgonMeta:
                             def accessor_parent_tparam(self, arg=arg):  # type: ignore -- PyRight and other tools falsely report this as conflicting defs
 
                                 aug_ns = {}
+                                print(tparam_set)
                                 for key in tparam_set:
                                     aug_ns[key] = getattr(self, key)
 
@@ -116,6 +115,7 @@ class ArgonMeta:
 
                                 # recursively resolve the GenericAlias
                                 arg_list = []
+                                print(typing.get_args(arg))
                                 for arg_i in typing.get_args(arg):
                                     arg_list.append(
                                         r_resolve(temp_globalns, temp_localns, arg_i)
