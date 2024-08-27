@@ -2,4 +2,4 @@
 name = "argon"
 version = "0.0.1"
 
-dependencies = ["pydantic", "fxpmath"]
+dependencies = ["pydantic", "fxpmath", "pytest", "sympy"]
