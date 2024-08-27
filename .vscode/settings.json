@@ -7,6 +7,8 @@
     "pylint.args": [
     "--disable=missing-module-docstring",
     "--disable=missing-class-docstring",
-    "--disable=missing-function-docstring"
+    "--disable=missing-function-docstring",
+    "--disable=no-self-argument",
+    "--disable=function-redefined"
 ],
 }
