@@ -154,6 +154,8 @@ class Transformer(ast.NodeTransformer):
                 return self.concrete_to_abstract(node)
         
         # Recursively visit arguments
+        prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
+        self.concrete_to_abstract_flag = False
         self.generic_visit(node)
 
         # Wrap arguments in a list
@@ -181,6 +183,7 @@ class Transformer(ast.NodeTransformer):
             args=[node.func, args_list],
             keywords=[]
         )
+        self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
         return staged_call
 
     # This method is called for ternary "if" expressions
