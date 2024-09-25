@@ -107,11 +107,51 @@ class Transformer(ast.NodeTransformer):
         self.calls = calls
         self.ifs = ifs
         self.if_exps = if_exps
+        self.concrete_to_abstract_flag = False
+    
+    def concrete_to_abstract(self, node):
+        return ast.Call(
+            func=ast.Attribute(
+                value=ast.Attribute(
+                    value=ast.Attribute(
+                        value=ast.Attribute(
+                            value=ast.Name(id="__________argon", ctx=ast.Load()),
+                            attr="argon",
+                            ctx=ast.Load()
+                        ),
+                        attr="virtualization",
+                        ctx=ast.Load()
+                    ),
+                    attr="type_mapper",
+                    ctx=ast.Load()
+                ),
+                attr="concrete_to_abstract",
+                ctx=ast.Load()
+            ),
+            args=[node],
+            keywords=[]
+        )
+    
+    def visit_Constant(self, node):
+        if self.concrete_to_abstract_flag:
+            return self.concrete_to_abstract(node)
+        return node
+    
+    def visit_Name(self, node):
+        if self.concrete_to_abstract_flag:
+            return self.concrete_to_abstract(node)
+        return node
+    
+    def visit_Assign(self, node):
+        return ast.Assign(targets=node.targets, value=self.visit(node.value))
     
     # This method is called for function calls
     def visit_Call(self, node):
         if not self.calls:
-            return node
+            if not self.concrete_to_abstract_flag:
+                return node
+            else:
+                return self.concrete_to_abstract(node)
         
         # Recursively visit arguments
         self.generic_visit(node)
@@ -146,9 +186,14 @@ class Transformer(ast.NodeTransformer):
     # This method is called for ternary "if" expressions
     def visit_IfExp(self, node):
         if not self.if_exps:
-            return node
+            if not self.concrete_to_abstract_flag:
+                return node
+            else:
+                return self.concrete_to_abstract(node)
 
         # Recursively visit the condition, the then case, and the else case
+        prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
+        self.concrete_to_abstract_flag = True
         self.generic_visit(node)
 
         # Stage if expression call
@@ -195,6 +240,7 @@ class Transformer(ast.NodeTransformer):
             ],
             keywords=[],
         )
+        self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
         return func_call
 
     # This method is called for if/else statements
@@ -215,6 +261,8 @@ class Transformer(ast.NodeTransformer):
         assigned_vars = then_vars | else_vars
 
         # Recursively visit the condition, the then case, and the else case
+        prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
+        self.concrete_to_abstract_flag = True
         self.generic_visit(node)
 
         # Save the condition in a temporary variable
@@ -233,7 +281,7 @@ class Transformer(ast.NodeTransformer):
                 ast.parse(
                     f"""
 try:
-    {temp_var} = lambda _, {var} = {var}: {var}
+    {temp_var} = lambda _, {var} = {var}: __________argon.argon.virtualization.type_mapper.concrete_to_abstract({var})
     {temp_var_exists} = True
 except NameError:
     {temp_var} = lambda T : __________argon.argon.state.stage(__________argon.argon.node.undefined.Undefined[T]("{var}"))
@@ -373,6 +421,7 @@ except NameError:
         node.test = ast.Constant(value=True)
 
         self.if_counter -= 1
+        self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
 
         return node
 

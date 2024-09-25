@@ -6,14 +6,14 @@ from argon.virtualization.wrapper import argon_function
 
 @argon_function(calls=False, ifs=False)
 def if_exps():
-    a = Boolean().const(True)
-    b = Boolean().const(False)
-    c = Integer().const(3)
-    d = Integer().const(6)
-    e = Integer().const(9)
-    f = Integer().const(12)
+    a = True
+    b = False
+    c = 3
+    d = 6
+    e = 9
+    f = 12
     g = c + d if a & b else e + f
-    h = g + g if a | b else Integer().const(15)
+    h = g + g if a | b else 15
 
 
 def test_if_exps():
@@ -27,19 +27,18 @@ def test_if_exps():
 
 @argon_function(calls=False, if_exps=False)
 def ifs():
-    a = Boolean().const(True)
-    b = Boolean().const(False)
-
-    c = Integer().const(3)
-    d = Integer().const(6)
-    e = Integer().const(9)
-    f = Integer().const(12)
-    g = Integer().const(15)
-    h = Integer().const(18)
-    i = Integer().const(21)
-    j = Integer().const(24)
-    k = Integer().const(27)
-    l = Integer().const(30)
+    a = True
+    b = False
+    c = 3
+    d = 6
+    e = 9
+    f = 12
+    g = 15
+    h = 18
+    i = 21
+    j = 24
+    k = 27
+    l = 30
 
     if a & b:
         m = c + d
