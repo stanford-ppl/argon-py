@@ -147,17 +147,18 @@ class Transformer(ast.NodeTransformer):
     
     # This method is called for function calls
     def visit_Call(self, node):
-        if not self.calls:
-            if not self.concrete_to_abstract_flag:
-                return node
-            else:
-                return self.concrete_to_abstract(node)
-        
         # Recursively visit arguments
         prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
         self.concrete_to_abstract_flag = False
         self.generic_visit(node)
         self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
+
+        # Do not stage the function call if the flag is set to False
+        if not self.calls:
+            if not self.concrete_to_abstract_flag:
+                return node
+            else:
+                return self.concrete_to_abstract(node)
 
         # Wrap arguments in a list
         args_list = ast.List(elts=node.args, ctx=ast.Load())
