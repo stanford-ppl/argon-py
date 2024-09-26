@@ -25,7 +25,7 @@ class FunctionCall[T](Op[T]):
     @typing.override
     def inputs(self) -> typing.List[Exp[typing.Any, typing.Any]]:
         # TODO: figure out what inputs I should use
-        pass
+        return self.args
 
     @typing.override
     def dump(self, indent_level=0) -> str:

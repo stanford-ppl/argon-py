@@ -189,17 +189,18 @@ class Transformer(ast.NodeTransformer):
 
     # This method is called for ternary "if" expressions
     def visit_IfExp(self, node):
+        # Recursively visit the condition, the then case, and the else case
+        prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
+        self.concrete_to_abstract_flag = self.if_exps
+        self.generic_visit(node)
+        self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
+
+        # Do not stage the if expression if the flag is set to False
         if not self.if_exps:
             if not self.concrete_to_abstract_flag:
                 return node
             else:
                 return self.concrete_to_abstract(node)
-
-        # Recursively visit the condition, the then case, and the else case
-        prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
-        self.concrete_to_abstract_flag = True
-        self.generic_visit(node)
-        self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
 
         # Stage if expression call
         func_call = ast.Call(
@@ -249,9 +250,6 @@ class Transformer(ast.NodeTransformer):
 
     # This method is called for if/else statements
     def visit_If(self, node):
-        if not self.ifs:
-            return node
-
         # Increment counter to ensure unique names for this if statement
         self.if_counter += 1
 
@@ -266,9 +264,13 @@ class Transformer(ast.NodeTransformer):
 
         # Recursively visit the condition, the then case, and the else case
         prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
-        self.concrete_to_abstract_flag = True
+        self.concrete_to_abstract_flag = self.ifs
         self.generic_visit(node)
         self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
+
+        # Do not stage the if statement if the flag is set to False
+        if not self.ifs:
+            return node
 
         # Save the condition in a temporary variable
         new_body: typing.List[ast.stmt] = [
