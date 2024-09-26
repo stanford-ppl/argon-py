@@ -157,6 +157,7 @@ class Transformer(ast.NodeTransformer):
         prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
         self.concrete_to_abstract_flag = False
         self.generic_visit(node)
+        self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
 
         # Wrap arguments in a list
         args_list = ast.List(elts=node.args, ctx=ast.Load())
@@ -183,7 +184,6 @@ class Transformer(ast.NodeTransformer):
             args=[node.func, args_list],
             keywords=[]
         )
-        self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
         return staged_call
 
     # This method is called for ternary "if" expressions
@@ -198,6 +198,7 @@ class Transformer(ast.NodeTransformer):
         prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
         self.concrete_to_abstract_flag = True
         self.generic_visit(node)
+        self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
 
         # Stage if expression call
         func_call = ast.Call(
@@ -243,7 +244,6 @@ class Transformer(ast.NodeTransformer):
             ],
             keywords=[],
         )
-        self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
         return func_call
 
     # This method is called for if/else statements
@@ -267,6 +267,7 @@ class Transformer(ast.NodeTransformer):
         prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
         self.concrete_to_abstract_flag = True
         self.generic_visit(node)
+        self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
 
         # Save the condition in a temporary variable
         new_body: typing.List[ast.stmt] = [
@@ -424,7 +425,6 @@ except NameError:
         node.test = ast.Constant(value=True)
 
         self.if_counter -= 1
-        self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
 
         return node
 
