@@ -1,6 +1,4 @@
 from argon.state import State
-from argon.types.boolean import Boolean
-from argon.types.integer import Integer
 from argon.virtualization.wrapper import argon_function
 
 

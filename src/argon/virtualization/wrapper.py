@@ -31,10 +31,13 @@ def argon_function(calls=True, ifs=True, if_exps=True):
         # TODO: fix ctx, when this decorator is used in test_scopes.py,
         # the ctx no longer points to the correct row number + col offset
 
-        # Get the source code of the function
-        src = inspect.getsource(func)
+        # Get the source code of the file where the function is defined
+        src = inspect.getfile(func)
+        # Read the entire file's source
+        with open(src, "r") as file:
+            file_src = file.read()
         # Parse it into an AST
-        parsed = ast.parse(src)
+        parsed = ast.parse(file_src)
 
         # Remove the decorators from the AST, because the modified function will
         # be passed to them anyway and we don't want them to be called twice.
@@ -55,15 +58,21 @@ def argon_function(calls=True, ifs=True, if_exps=True):
                 node.args.kwonlyargs.append(
                     ast.arg(arg="__________argon", annotation=None)
                 )
+                func_src = node
                 break
 
         # Apply the AST transformation
         # TODO: Add the transformation flags here too!
-        transformed = Transformer(calls, ifs, if_exps).visit(parsed)
+        transformed = Transformer(calls, ifs, if_exps).visit(func_src)
         transformed = ast.fix_missing_locations(transformed)
 
+        # Create a new AST containing only the transformed function
+        transformed_module = ast.Module(body=[transformed], type_ignores=[])
+
         # Compile the transformed AST
-        compiled = compile(transformed, filename=func.__code__.co_filename, mode="exec")
+        compiled = compile(
+            transformed_module, filename=func.__code__.co_filename, mode="exec"
+        )
         # Create a new function from the compiled code
         func_globals = func.__globals__
         exec(compiled, func_globals)
