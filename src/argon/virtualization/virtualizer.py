@@ -246,6 +246,13 @@ class Transformer(ast.NodeTransformer):
             ],
             keywords=[],
         )
+
+        # Attach source location (line numbers and column offsets)
+        func_call.lineno = node.lineno
+        func_call.end_lineno = getattr(node, 'end_lineno', None)  # Some nodes may not have end_lineno
+        func_call.col_offset = node.col_offset
+        func_call.end_col_offset = getattr(node, 'end_col_offset', None)  # Some nodes may not have end_col_offset
+
         return func_call
 
     # This method is called for if/else statements
