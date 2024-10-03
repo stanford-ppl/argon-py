@@ -190,6 +190,13 @@ class Transformer(ast.NodeTransformer):
             args=[node.func, args_list],
             keywords=[]
         )
+
+        # Attach source location (line numbers and column offsets)
+        staged_call.lineno = node.lineno
+        staged_call.end_lineno = getattr(node, 'end_lineno', None)
+        staged_call.col_offset = node.col_offset
+        staged_call.end_col_offset = getattr(node, 'end_col_offset', None)
+
         return staged_call
 
     # This method is called for ternary "if" expressions
