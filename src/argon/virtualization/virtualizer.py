@@ -1,4 +1,5 @@
 import ast
+import dis
 import types
 import typing
 
@@ -49,13 +50,16 @@ def stage_if_exp_with_scopes(
 
 
 def stage_if(
+    file_name: str,
+    lineno: int,
+    col_offset: int,
     cond: Boolean,
     thenBody: typing.List[Exp[typing.Any, typing.Any]],
     elseBody: typing.List[Exp[typing.Any, typing.Any]] = [],
 ) -> Ref[typing.Any, typing.Any]:
     thenBlk = Block[Null](get_inputs(thenBody), thenBody, Null().const(None))
     elseBlk = Block[Null](get_inputs(elseBody), elseBody, Null().const(None))
-    return stage(IfThenElse[Null](cond, thenBlk, elseBlk), ctx=SrcCtx.new(2))
+    return stage(IfThenElse[Null](cond, thenBlk, elseBlk), ctx=SrcCtx(file_name, dis.Positions(lineno=lineno, col_offset=col_offset)))
 
 
 def get_inputs(scope_symbols: typing.List[Exp[typing.Any, typing.Any]]) -> typing.List[Exp[typing.Any, typing.Any]]:
@@ -100,10 +104,11 @@ def stage_function_call(func: types.FunctionType, args: typing.List[typing.Any])
 
 
 class Transformer(ast.NodeTransformer):
-    def __init__(self, calls, ifs, if_exps):
+    def __init__(self, file_name, calls, ifs, if_exps):
         super().__init__()
         self.if_counter = 0
         self.unique_prefix = "__________"
+        self.file_name = file_name
         self.calls = calls
         self.ifs = ifs
         self.if_exps = if_exps
@@ -276,6 +281,7 @@ class Transformer(ast.NodeTransformer):
         self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
 
         # Do not stage the if statement if the flag is set to False
+        # TODO: error handling if condition is Argon type
         if not self.ifs:
             return node
 
@@ -378,13 +384,13 @@ except NameError:
         if node.orelse:
             new_body.extend(
                 ast.parse(
-                    f"__________argon.argon.virtualization.virtualizer.stage_if({self.generate_temp_var("cond")}, {then_scope_name}.scope.symbols, {else_scope_name}.scope.symbols)"
+                    f"__________argon.argon.virtualization.virtualizer.stage_if('{self.file_name}', {node.lineno}, {node.col_offset}, {self.generate_temp_var("cond")}, {then_scope_name}.scope.symbols, {else_scope_name}.scope.symbols)"
                 ).body
             )
         else:
             new_body.extend(
                 ast.parse(
-                    f"__________argon.argon.virtualization.virtualizer.stage_if({self.generate_temp_var('cond')}, {then_scope_name}.scope.symbols)"
+                    f"__________argon.argon.virtualization.virtualizer.stage_if('{self.file_name}', {node.lineno}, {node.col_offset}, {self.generate_temp_var('cond')}, {then_scope_name}.scope.symbols)"
                 ).body
             )
 

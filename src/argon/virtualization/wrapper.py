@@ -63,7 +63,7 @@ def argon_function(calls=True, ifs=True, if_exps=True):
 
         # Apply the AST transformation
         # TODO: Add the transformation flags here too!
-        transformed = Transformer(calls, ifs, if_exps).visit(func_src)
+        transformed = Transformer(src, calls, ifs, if_exps).visit(func_src)
         transformed = ast.fix_missing_locations(transformed)
 
         # Create a new AST containing only the transformed function
