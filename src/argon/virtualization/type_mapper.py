@@ -11,6 +11,10 @@ class _CToA:
         self.C_to_A_map[tp_c] = tp_a_initializer
 
     def function(self, c, args: typing.List[Ref[typing.Any, typing.Any]]) -> "Function":
+        # Unwrap the function if it's decorated
+        while hasattr(c, "__wrapped__"):
+            c = c.__wrapped__
+
         if not isinstance(c, types.FunctionType):
             raise ValueError(f"Expected function, got {c}")
         return self.C_to_A_map[types.FunctionType](c, args)

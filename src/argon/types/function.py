@@ -1,4 +1,5 @@
 import abc
+import dis
 import types
 from typing import override, Protocol
 import typing
@@ -62,7 +63,10 @@ def function_C_to_A(
 
     return stage(
         FunctionNew[Function[ret.A]](name, bound_args, body, c_with_virt),
-        ctx=SrcCtx.new(2),
+        ctx=SrcCtx(
+            c.__code__.co_filename,
+            dis.Positions(lineno=c.__code__.co_firstlineno, col_offset=0),
+        ),
     )
 
 
