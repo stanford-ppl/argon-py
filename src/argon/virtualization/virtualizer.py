@@ -38,14 +38,18 @@ def stage_if_exp_with_scopes(
     else_scope = state.new_scope()
     with else_scope:
         elseBody: Exp[typing.Any, typing.Any] = elseBodyLambda()
-    
+
     # Type check
     if thenBody.tp.A != elseBody.tp.A:
         raise TypeError(f"Type mismatch: {thenBody.tp.A} != {elseBody.tp.A}")
 
-    thenBlk = Block[thenBody.tp.A](get_inputs(then_scope.scope.symbols), then_scope.scope.symbols, thenBody)
-    elseBlk = Block[thenBody.tp.A](get_inputs(else_scope.scope.symbols), else_scope.scope.symbols, elseBody)
-    
+    thenBlk = Block[thenBody.tp.A](
+        get_inputs(then_scope.scope.symbols), then_scope.scope.symbols, thenBody
+    )
+    elseBlk = Block[thenBody.tp.A](
+        get_inputs(else_scope.scope.symbols), else_scope.scope.symbols, elseBody
+    )
+
     return stage(IfThenElse[thenBody.tp.A](cond, thenBlk, elseBlk), ctx=SrcCtx.new(2))
 
 
@@ -59,61 +63,78 @@ def stage_if(
 ) -> Ref[typing.Any, typing.Any]:
     thenBlk = Block[Null](get_inputs(thenBody), thenBody, Null().const(None))
     elseBlk = Block[Null](get_inputs(elseBody), elseBody, Null().const(None))
-    return stage(IfThenElse[Null](cond, thenBlk, elseBlk), ctx=SrcCtx(file_name, dis.Positions(lineno=lineno, col_offset=col_offset)))
+    return stage(
+        IfThenElse[Null](cond, thenBlk, elseBlk),
+        ctx=SrcCtx(file_name, dis.Positions(lineno=lineno, col_offset=col_offset)),
+    )
 
 
-def get_inputs(scope_symbols: typing.List[Exp[typing.Any, typing.Any]]) -> typing.List[Exp[typing.Any, typing.Any]]:
+def get_inputs(
+    scope_symbols: typing.List[Exp[typing.Any, typing.Any]]
+) -> typing.List[Exp[typing.Any, typing.Any]]:
     # We only want to consider symbols that have inputs in their rhs (i.e. Nodes)
     # We also want to exclude Mux nodes from the list of inputs
     scope_symbols = [
-        symbol for symbol in scope_symbols
-        if symbol.rhs != None and isinstance(symbol.rhs.val, Node) and not isinstance(symbol.rhs.val.underlying, Phi)
+        symbol
+        for symbol in scope_symbols
+        if symbol.rhs != None
+        and isinstance(symbol.rhs.val, Node)
+        and not isinstance(symbol.rhs.val.underlying, Phi)
     ]
 
     # We use a symbol's id instead of just the symbol objects below because symbols
     # are not hashable and Python complains.
     # Create a dictionary mapping IDs to symbols
-    symbol_map = {symbol.rhs.val.id: symbol for symbol in scope_symbols} # type: ignore -- symbol.rhs.val has already been checked to be a Node
+    symbol_map = {symbol.rhs.val.id: symbol for symbol in scope_symbols}  # type: ignore -- symbol.rhs.val has already been checked to be a Node
 
     all_symbol_ids = set(symbol_map.keys())
 
-    # The list of inputs in our scope constitutes the set of all inputs of all symbols 
+    # The list of inputs in our scope constitutes the set of all inputs of all symbols
     # minus the set of all symbols defined in this scope
     all_input_ids = set()
     for symbol in scope_symbols:
-        inputs = symbol.rhs.val.underlying.inputs # type: ignore -- symbol.rhs.val has already been checked to be a Node
+        inputs = symbol.rhs.val.underlying.inputs  # type: ignore -- symbol.rhs.val has already been checked to be a Node
         inputs = [
-            input for input in inputs
+            input
+            for input in inputs
             if input.rhs != None and isinstance(input.rhs.val, Node)
         ]
-        symbol_map.update({input.rhs.val.id: input for input in inputs}) # type: ignore -- input.rhs.val has already been checked to be a Node
-        all_input_ids.update({input.rhs.val.id for input in inputs}) # type: ignore -- input.rhs.val has already been checked to be a Node
-    
+        symbol_map.update({input.rhs.val.id: input for input in inputs})  # type: ignore -- input.rhs.val has already been checked to be a Node
+        all_input_ids.update({input.rhs.val.id for input in inputs})  # type: ignore -- input.rhs.val has already been checked to be a Node
+
     result_ids = all_input_ids - all_symbol_ids
     return [symbol_map[result_id] for result_id in result_ids]
 
 
-def stage_function_call(func: types.FunctionType, args: typing.List[typing.Any]) -> Ref[typing.Any, typing.Any]:
-    white_list = [print] # TODO: Add more whitelisted functions here that we don't want to stage
+def stage_function_call(
+    func: types.FunctionType, args: typing.List[typing.Any]
+) -> Ref[typing.Any, typing.Any]:
+    white_list = [
+        print
+    ]  # TODO: Add more whitelisted functions here that we don't want to stage
     if func in white_list:
         return func(*args)
 
     abstract_args = [concrete_to_abstract(arg) for arg in args]
     abstract_func = concrete_to_abstract.function(func, abstract_args)
-    return stage(FunctionCall[abstract_func.F](abstract_func, abstract_args), ctx=SrcCtx.new(2))
+    return stage(
+        FunctionCall[abstract_func.F](abstract_func, abstract_args), ctx=SrcCtx.new(2)
+    )
 
 
 class Transformer(ast.NodeTransformer):
-    def __init__(self, file_name, calls, ifs, if_exps):
+    def __init__(self, file_name, calls, ifs, if_exps, loops):
         super().__init__()
-        self.if_counter = 0
+        self.counter = 0
         self.unique_prefix = "__________"
         self.file_name = file_name
         self.calls = calls
         self.ifs = ifs
         self.if_exps = if_exps
+        self.loops = loops
         self.concrete_to_abstract_flag = False
-    
+        self.assigned_vars = set()
+
     def concrete_to_abstract(self, node):
         return ast.Call(
             func=ast.Attribute(
@@ -122,34 +143,53 @@ class Transformer(ast.NodeTransformer):
                         value=ast.Attribute(
                             value=ast.Name(id="__________argon", ctx=ast.Load()),
                             attr="argon",
-                            ctx=ast.Load()
+                            ctx=ast.Load(),
                         ),
                         attr="virtualization",
-                        ctx=ast.Load()
+                        ctx=ast.Load(),
                     ),
                     attr="type_mapper",
-                    ctx=ast.Load()
+                    ctx=ast.Load(),
                 ),
                 attr="concrete_to_abstract",
-                ctx=ast.Load()
+                ctx=ast.Load(),
             ),
             args=[node],
-            keywords=[]
+            keywords=[],
         )
-    
+
+    def visit(self, node):
+        # Save current assigned_vars and start a fresh set for this node
+        prev_assigned_vars = self.assigned_vars.copy()
+        self.assigned_vars = set()
+
+        # Traverse the node and its children
+        node = super().visit(node)
+
+        # Merge the assigned variables found in this node with the previous set
+        self.assigned_vars = prev_assigned_vars | self.assigned_vars
+
+        return node
+
     def visit_Constant(self, node):
         if self.concrete_to_abstract_flag:
             return self.concrete_to_abstract(node)
         return node
-    
+
     def visit_Name(self, node):
         if self.concrete_to_abstract_flag:
             return self.concrete_to_abstract(node)
         return node
-    
+
     def visit_Assign(self, node):
+        # Save the assigned variables
+        for target in node.targets:
+            if isinstance(target, ast.Name):
+                self.assigned_vars.add(target.id)
+
+        # Recursively visit the value being assigned
         return ast.Assign(targets=node.targets, value=self.visit(node.value))
-    
+
     # This method is called for function calls
     def visit_Call(self, node):
         # Recursively visit arguments
@@ -176,19 +216,19 @@ class Transformer(ast.NodeTransformer):
                         value=ast.Attribute(
                             value=ast.Name(id="__________argon", ctx=ast.Load()),
                             attr="argon",
-                            ctx=ast.Load()
+                            ctx=ast.Load(),
                         ),
                         attr="virtualization",
-                        ctx=ast.Load()
+                        ctx=ast.Load(),
                     ),
                     attr="virtualizer",
-                    ctx=ast.Load()
+                    ctx=ast.Load(),
                 ),
                 attr="stage_function_call",
-                ctx=ast.Load()
+                ctx=ast.Load(),
             ),
             args=[node.func, args_list],
-            keywords=[]
+            keywords=[],
         )
 
         # Attach source location (line numbers and column offsets)
@@ -219,16 +259,16 @@ class Transformer(ast.NodeTransformer):
                         value=ast.Attribute(
                             value=ast.Name(id="__________argon", ctx=ast.Load()),
                             attr="argon",
-                            ctx=ast.Load()
+                            ctx=ast.Load(),
                         ),
                         attr="virtualization",
-                        ctx=ast.Load()
+                        ctx=ast.Load(),
                     ),
                     attr="virtualizer",
-                    ctx=ast.Load()
+                    ctx=ast.Load(),
                 ),
                 attr="stage_if_exp_with_scopes",
-                ctx=ast.Load()
+                ctx=ast.Load(),
             ),
             args=[
                 node.test,  # the condition in the if expression
@@ -264,21 +304,29 @@ class Transformer(ast.NodeTransformer):
     # This method is called for if/else statements
     def visit_If(self, node):
         # Increment counter to ensure unique names for this if statement
-        self.if_counter += 1
+        self.counter += 1
 
-        # Find all assigned variables in the current 'if' statement
-        then_vars = set()
-        for stm in node.body:
-            then_vars = then_vars | self.get_assigned_vars(stm)
-        else_vars = set()
-        for stm in node.orelse:
-            else_vars = else_vars | self.get_assigned_vars(stm)
-        assigned_vars = then_vars | else_vars
-
-        # Recursively visit the condition, the then case, and the else case
+        # Properly set flags before recursive visits
         prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
         self.concrete_to_abstract_flag = self.ifs
-        self.generic_visit(node)
+
+        # Recursively visit the condition
+        # self.generic_visit(node)
+        node.test = self.visit(node.test)
+        cond_vars = self.assigned_vars.copy()
+
+        # Recursively visit the then body
+        self.assigned_vars = set()
+        node.body = [self.visit(stmt) for stmt in node.body]
+        then_vars = self.assigned_vars.copy()
+
+        # Recursively visit the else body
+        self.assigned_vars = set()
+        node.orelse = [self.visit(stmt) for stmt in node.orelse]
+        else_vars = self.assigned_vars.copy()
+
+        # Merge the assigned variables found
+        self.assigned_vars = cond_vars | then_vars | else_vars
         self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
 
         # Do not stage the if statement if the flag is set to False
@@ -295,7 +343,7 @@ class Transformer(ast.NodeTransformer):
         ]
 
         # Save the previous value of variables if had existed, otherwise set them to Undefined
-        for var in assigned_vars:
+        for var in self.assigned_vars:
             temp_var = self.generate_temp_var(var, "old")
             temp_var_exists = self.generate_temp_var(var, "old", "exists")
             new_body.extend(
@@ -313,7 +361,11 @@ except NameError:
 
         # Run the then body under a different scope
         then_scope_name = self.generate_temp_var("then", "scope")
-        new_body.extend(ast.parse(f"{then_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()").body)
+        new_body.extend(
+            ast.parse(
+                f"{then_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()"
+            ).body
+        )
         new_body.append(
             ast.With(
                 items=[
@@ -328,7 +380,7 @@ except NameError:
         )
 
         # Make result from 'then' body a lambda and revert variables back to their original value before the 'then' body
-        for var in assigned_vars:
+        for var in self.assigned_vars:
             temp_var_T = self.generate_temp_var(var, "T")
             temp_var_then = self.generate_temp_var(var, "then")
             temp_var_old = self.generate_temp_var(var, "old")
@@ -352,7 +404,11 @@ except NameError:
         # Run the else body under a different scope
         else_scope_name = self.generate_temp_var("else", "scope")
         if node.orelse:
-            new_body.extend(ast.parse(f"{else_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()").body)
+            new_body.extend(
+                ast.parse(
+                    f"{else_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()"
+                ).body
+            )
             new_body.append(
                 ast.With(
                     items=[
@@ -365,7 +421,7 @@ except NameError:
             )
 
         # Make result from 'else' body a lambda
-        for var in assigned_vars:
+        for var in self.assigned_vars:
             temp_var_T = self.generate_temp_var(var, "T")
             temp_var_else = self.generate_temp_var(var, "else")
             temp_var_old = self.generate_temp_var(var, "old")
@@ -396,7 +452,7 @@ except NameError:
             )
 
         # Stage each assigned variable be a mux of the possible values from each branch
-        for var in assigned_vars:
+        for var in self.assigned_vars:
             temp_var_cond = self.generate_temp_var("cond")
             temp_var_then = self.generate_temp_var(var, "then")
             temp_var_else = self.generate_temp_var(var, "else")
@@ -411,7 +467,7 @@ except NameError:
         new_body.append(
             ast.Delete(targets=[ast.Name(id=self.generate_temp_var("cond"), ctx=ast.Del())])
         )
-        for var in assigned_vars:
+        for var in self.assigned_vars:
             temp_var_old = self.generate_temp_var(var, "old")
             temp_var_old_exists = self.generate_temp_var(var, "old", "exists")
             temp_var_then = self.generate_temp_var(var, "then")
@@ -443,21 +499,12 @@ except NameError:
         # Set the condition to True to run both the then and else bodies under different scopes
         node.test = ast.Constant(value=True)
 
-        self.if_counter -= 1
+        self.counter -= 1
 
         return node
 
     def generate_temp_var(self, *args) -> str:
-        return self.unique_prefix + "_".join(args) + "_" + str(self.if_counter)
-
-    def get_assigned_vars(self, stm: ast.stmt) -> set:
-        assigned_vars = set()
-        for n in ast.walk(stm):
-            if isinstance(n, ast.Assign):
-                for target in n.targets:
-                    if isinstance(target, ast.Name):
-                        assigned_vars.add(target.id)
-        return assigned_vars
+        return self.unique_prefix + "_".join(args) + "_" + str(self.counter)
 
     def modify_body(
         self, body: typing.List[ast.stmt], scope_name: str, vars: set

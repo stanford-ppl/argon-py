@@ -9,7 +9,7 @@ from argon.virtualization.virtualizer import Transformer
 
 
 # TODO: After implementing more transformations, add relevant flags to the decorator to enable/disable them
-def argon_function(calls=True, ifs=True, if_exps=True):
+def argon_function(calls=True, ifs=True, if_exps=True, loops=True):
     """
     This decorator is used to virtualize a function. It takes three optional arguments that are by default all set to True:
 
@@ -19,6 +19,8 @@ def argon_function(calls=True, ifs=True, if_exps=True):
             Determines whether if statements will be virtualized.
         if_exps: bool
             Determines whether if expressions will be virtualized.
+        loops: bool
+            Determines whether loops will be virtualized.
 
     Examples:
 
@@ -63,7 +65,7 @@ def argon_function(calls=True, ifs=True, if_exps=True):
 
         # Apply the AST transformation
         # TODO: Add the transformation flags here too!
-        transformed = Transformer(src, calls, ifs, if_exps).visit(func_src)
+        transformed = Transformer(src, calls, ifs, if_exps, loops).visit(func_src)
         transformed = ast.fix_missing_locations(transformed)
 
         # Create a new AST containing only the transformed function
