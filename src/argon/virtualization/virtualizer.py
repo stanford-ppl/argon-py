@@ -192,10 +192,7 @@ class Transformer(ast.NodeTransformer):
         )
 
         # Attach source location (line numbers and column offsets)
-        staged_call.lineno = node.lineno
-        staged_call.end_lineno = getattr(node, 'end_lineno', None)
-        staged_call.col_offset = node.col_offset
-        staged_call.end_col_offset = getattr(node, 'end_col_offset', None)
+        ast.copy_location(staged_call, node)
 
         return staged_call
 
@@ -260,10 +257,7 @@ class Transformer(ast.NodeTransformer):
         )
 
         # Attach source location (line numbers and column offsets)
-        func_call.lineno = node.lineno
-        func_call.end_lineno = getattr(node, 'end_lineno', None)  # Some nodes may not have end_lineno
-        func_call.col_offset = node.col_offset
-        func_call.end_col_offset = getattr(node, 'end_col_offset', None)  # Some nodes may not have end_col_offset
+        ast.copy_location(func_call, node)
 
         return func_call
 

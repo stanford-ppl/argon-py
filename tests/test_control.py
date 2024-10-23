@@ -23,7 +23,11 @@ def test_if_exps():
     print(state)
 
 
-@argon_function(calls=False, if_exps=False)
+def my_func(x, y):
+    return x + y
+
+
+@argon_function(calls=True, if_exps=False)
 def ifs():
     a = True
     b = False
@@ -39,7 +43,8 @@ def ifs():
     l = 30
 
     if a & b:
-        m = c + d
+        m = my_func(c, d)
+        l = 35 if a | b else 33
     else:
         m = e + f
 
