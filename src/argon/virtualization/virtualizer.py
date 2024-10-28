@@ -408,7 +408,9 @@ except NameError:
             )
 
         # Delete all temporary variables
-        ast.Delete(targets=[ast.Name(id=self.generate_temp_var("cond"), ctx=ast.Del())])
+        new_body.append(
+            ast.Delete(targets=[ast.Name(id=self.generate_temp_var("cond"), ctx=ast.Del())])
+        )
         for var in assigned_vars:
             temp_var_old = self.generate_temp_var(var, "old")
             temp_var_old_exists = self.generate_temp_var(var, "old", "exists")
