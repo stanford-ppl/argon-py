@@ -134,6 +134,7 @@ class Transformer(ast.NodeTransformer):
         self.loops = loops
         self.concrete_to_abstract_flag = False
         self.assigned_vars = set()
+        self.loaded_vars = set()
 
     def concrete_to_abstract(self, node):
         return ast.Call(
@@ -163,11 +164,18 @@ class Transformer(ast.NodeTransformer):
         prev_assigned_vars = self.assigned_vars.copy()
         self.assigned_vars = set()
 
+        # Do the same for loaded_vars
+        prev_loaded_vars = self.loaded_vars.copy()
+        self.loaded_vars = set()
+
         # Traverse the node and its children
         node = super().visit(node)
 
         # Merge the assigned variables found in this node with the previous set
         self.assigned_vars = prev_assigned_vars | self.assigned_vars
+
+        # Merge the loaded variables found in this node with the previous set
+        self.loaded_vars = prev_loaded_vars | self.loaded_vars
 
         return node
 
@@ -177,6 +185,10 @@ class Transformer(ast.NodeTransformer):
         return node
 
     def visit_Name(self, node):
+        # Save the loaded variables
+        if isinstance(node.ctx, ast.Load):
+            self.loaded_vars.add(node.id)
+
         if self.concrete_to_abstract_flag:
             return self.concrete_to_abstract(node)
         return node
@@ -313,20 +325,24 @@ class Transformer(ast.NodeTransformer):
         # Recursively visit the condition
         # self.generic_visit(node)
         node.test = self.visit(node.test)
-        cond_vars = self.assigned_vars.copy()
+        cond_assigned_vars = self.assigned_vars.copy()
+        cond_loaded_vars = self.loaded_vars.copy()
 
         # Recursively visit the then body
         self.assigned_vars = set()
         node.body = [self.visit(stmt) for stmt in node.body]
-        then_vars = self.assigned_vars.copy()
+        then_assigned_vars = self.assigned_vars.copy()
+        then_loaded_vars = self.loaded_vars.copy()
 
         # Recursively visit the else body
         self.assigned_vars = set()
         node.orelse = [self.visit(stmt) for stmt in node.orelse]
-        else_vars = self.assigned_vars.copy()
+        else_assigned_vars = self.assigned_vars.copy()
+        else_loaded_vars = self.loaded_vars.copy()
 
         # Merge the assigned variables found
-        self.assigned_vars = cond_vars | then_vars | else_vars
+        self.assigned_vars = cond_assigned_vars | then_assigned_vars | else_assigned_vars
+        self.loaded_vars = cond_loaded_vars | then_loaded_vars | else_loaded_vars
         self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
 
         # Do not stage the if statement if the flag is set to False
@@ -374,7 +390,7 @@ except NameError:
                     )
                 ],
                 body=self.modify_body(
-                    node.body, "then", then_vars
+                    node.body, "then", then_assigned_vars
                 ),  # For all variables in the 'then' body, assign temp_var = var at the end of the body
             )
         )
@@ -416,7 +432,7 @@ except NameError:
                             context_expr=ast.Name(id=else_scope_name, ctx=ast.Load())
                         )
                     ],
-                    body=self.modify_body(node.orelse, "else", else_vars),
+                    body=self.modify_body(node.orelse, "else", else_assigned_vars),
                 )
             )
 
