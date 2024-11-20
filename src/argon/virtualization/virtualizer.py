@@ -26,12 +26,15 @@ def stage_phi(
 
 
 def stage_if_exp_with_scopes(
-    cond: Boolean,
+    condLambda: typing.Callable[[], Exp[typing.Any, typing.Any]],
     thenBodyLambda: typing.Callable[[], Exp[typing.Any, typing.Any]],
     elseBodyLambda: typing.Callable[[], Exp[typing.Any, typing.Any]],
 ) -> Ref[typing.Any, typing.Any]:
     # Execute the bodies in separate scopes
     state = State.get_current_state()
+    cond_scope = state.new_scope()
+    with cond_scope:
+        cond: Exp[typing.Any, typing.Any] = condLambda()
     then_scope = state.new_scope()
     with then_scope:
         thenBody: Exp[typing.Any, typing.Any] = thenBodyLambda()
@@ -43,6 +46,9 @@ def stage_if_exp_with_scopes(
     if thenBody.tp.A != elseBody.tp.A:
         raise TypeError(f"Type mismatch: {thenBody.tp.A} != {elseBody.tp.A}")
 
+    condBlk = Block[Boolean](
+        get_inputs(cond_scope.scope.symbols), cond_scope.scope.symbols, cond
+    )
     thenBlk = Block[thenBody.tp.A](
         get_inputs(then_scope.scope.symbols), then_scope.scope.symbols, thenBody
     )
@@ -50,21 +56,24 @@ def stage_if_exp_with_scopes(
         get_inputs(else_scope.scope.symbols), else_scope.scope.symbols, elseBody
     )
 
-    return stage(IfThenElse[thenBody.tp.A](cond, thenBlk, elseBlk), ctx=SrcCtx.new(2))
+    return stage(
+        IfThenElse[thenBody.tp.A](condBlk, thenBlk, elseBlk), ctx=SrcCtx.new(2)
+    )
 
 
 def stage_if(
     file_name: str,
     lineno: int,
     col_offset: int,
-    cond: Boolean,
+    cond: typing.List[Exp[typing.Any, typing.Any]],
     thenBody: typing.List[Exp[typing.Any, typing.Any]],
     elseBody: typing.List[Exp[typing.Any, typing.Any]] = [],
 ) -> Ref[typing.Any, typing.Any]:
+    condBlk = Block[Boolean](get_inputs(cond), cond, cond[-1])
     thenBlk = Block[Null](get_inputs(thenBody), thenBody, Null().const(None))
     elseBlk = Block[Null](get_inputs(elseBody), elseBody, Null().const(None))
     return stage(
-        IfThenElse[Null](cond, thenBlk, elseBlk),
+        IfThenElse[Null](condBlk, thenBlk, elseBlk),
         ctx=SrcCtx(file_name, dis.Positions(lineno=lineno, col_offset=col_offset)),
     )
 
@@ -276,7 +285,16 @@ class Transformer(ast.NodeTransformer):
                 ctx=ast.Load(),
             ),
             args=[
-                node.test,  # the condition in the if expression
+                ast.Lambda(  # the condition in the if expression wrapped in a lambda
+                    args=ast.arguments(
+                        posonlyargs=[],
+                        args=[],
+                        kwonlyargs=[],
+                        kw_defaults=[],
+                        defaults=[],
+                    ),
+                    body=node.test,
+                ),
                 ast.Lambda(  # the expression for the 'true' case wrapped in a lambda
                     args=ast.arguments(
                         posonlyargs=[],
@@ -334,7 +352,9 @@ class Transformer(ast.NodeTransformer):
         else_loaded_vars = self.loaded_vars.copy()
 
         # Merge the assigned variables found
-        self.assigned_vars = cond_assigned_vars | then_assigned_vars | else_assigned_vars
+        self.assigned_vars = (
+            cond_assigned_vars | then_assigned_vars | else_assigned_vars
+        )
         self.loaded_vars = cond_loaded_vars | then_loaded_vars | else_loaded_vars
         self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
 
@@ -343,13 +363,32 @@ class Transformer(ast.NodeTransformer):
         if not self.ifs:
             return node
 
-        # Save the condition in a temporary variable
-        new_body: typing.List[ast.stmt] = [
-            ast.Assign(
-                targets=[ast.Name(id=self.generate_temp_var("cond"), ctx=ast.Store())],
-                value=node.test,
+        new_body: typing.List[ast.stmt] = []
+
+        # Run the condition under a different scope
+        cond_scope_name = self.generate_temp_var("cond", "scope")
+        new_body.extend(
+            ast.parse(
+                f"{cond_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()"
+            ).body
+        )
+        new_body.append(
+            ast.With(
+                items=[
+                    ast.withitem(
+                        context_expr=ast.Name(id=cond_scope_name, ctx=ast.Load())
+                    )
+                ],
+                body=[
+                    ast.Assign(
+                        targets=[
+                            ast.Name(id=self.generate_temp_var("cond"), ctx=ast.Store())
+                        ],
+                        value=node.test,
+                    )
+                ],
             )
-        ]
+        )
 
         # Save the previous value of variables if had existed, otherwise set them to Undefined
         for var in self.assigned_vars:
@@ -450,13 +489,13 @@ except NameError:
         if node.orelse:
             new_body.extend(
                 ast.parse(
-                    f"__________argon.argon.virtualization.virtualizer.stage_if('{self.file_name}', {node.lineno}, {node.col_offset}, {self.generate_temp_var("cond")}, {then_scope_name}.scope.symbols, {else_scope_name}.scope.symbols)"
+                    f"__________argon.argon.virtualization.virtualizer.stage_if('{self.file_name}', {node.lineno}, {node.col_offset}, {cond_scope_name}.scope.symbols, {then_scope_name}.scope.symbols, {else_scope_name}.scope.symbols)"
                 ).body
             )
         else:
             new_body.extend(
                 ast.parse(
-                    f"__________argon.argon.virtualization.virtualizer.stage_if('{self.file_name}', {node.lineno}, {node.col_offset}, {self.generate_temp_var('cond')}, {then_scope_name}.scope.symbols)"
+                    f"__________argon.argon.virtualization.virtualizer.stage_if('{self.file_name}', {node.lineno}, {node.col_offset}, {cond_scope_name}.scope.symbols, {then_scope_name}.scope.symbols)"
                 ).body
             )
 
@@ -474,7 +513,9 @@ except NameError:
 
         # Delete all temporary variables
         new_body.append(
-            ast.Delete(targets=[ast.Name(id=self.generate_temp_var("cond"), ctx=ast.Del())])
+            ast.Delete(
+                targets=[ast.Name(id=self.generate_temp_var("cond"), ctx=ast.Del())]
+            )
         )
         for var in self.assigned_vars:
             temp_var_old = self.generate_temp_var(var, "old")
@@ -493,6 +534,9 @@ except NameError:
                     ast.Delete(targets=[ast.Name(id=temp_var_T, ctx=ast.Del())]),
                 ]
             )
+        new_body.append(
+            ast.Delete(targets=[ast.Name(id=cond_scope_name, ctx=ast.Del())])
+        )
         new_body.append(
             ast.Delete(targets=[ast.Name(id=then_scope_name, ctx=ast.Del())])
         )

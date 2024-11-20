@@ -23,14 +23,14 @@ class IfThenElse[T](Op[T]):
             The block to execute if the condition is false.
     """
 
-    cond: Boolean
+    condBlk: Block[Boolean]
     thenBlk: Block[T]
     elseBlk: Block[T]
 
     @property
     @typing.override
     def inputs(self) -> typing.List[Sym[typing.Any]]:
-        return [self.cond] + self.thenBlk.inputs + self.elseBlk.inputs  # type: ignore
+        return self.condBlk.inputs + self.thenBlk.inputs + self.elseBlk.inputs  # type: ignore
 
     @typing.override
     def dump(self, indent_level=0) -> str:
@@ -38,7 +38,7 @@ class IfThenElse[T](Op[T]):
         indent = "|   " * (indent_level + 1)
         return (
             f"IfThenElse( \n"
-            f"{indent}cond = {self.cond}, \n"
+            f"{indent}condBlk = {self.condBlk.dump(indent_level + 1)}, \n"
             f"{indent}thenBlk = {self.thenBlk.dump(indent_level + 1)}, \n"
             f"{indent}elseBlk = {self.elseBlk.dump(indent_level + 1)} \n"
             f"{no_indent})"
