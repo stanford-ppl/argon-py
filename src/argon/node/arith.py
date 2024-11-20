@@ -26,7 +26,7 @@ class Add[T](Op[T]):
 
     @property
     @typing.override
-    def inputs(self) -> typing.List[Sym[typing.Any]]:
+    def operands(self) -> typing.List[Sym[typing.Any]]:
         return [self.a, self.b]  # type: ignore
 
 
@@ -46,7 +46,7 @@ class Sub[T](Op[T]):
 
     @property
     @typing.override
-    def inputs(self) -> typing.List[Sym[typing.Any]]:
+    def operands(self) -> typing.List[Sym[typing.Any]]:
         return [self.a, self.b]
 
 
@@ -66,7 +66,7 @@ class GreaterThan[T](Op[Boolean]):
 
     @property
     @typing.override
-    def inputs(self) -> typing.List[Sym[typing.Any]]:
+    def operands(self) -> typing.List[Sym[typing.Any]]:
         return [self.a, self.b]
 
 
@@ -86,5 +86,5 @@ class LessThan[T](Op[Boolean]):
 
     @property
     @typing.override
-    def inputs(self) -> typing.List[Sym[typing.Any]]:
+    def operands(self) -> typing.List[Sym[typing.Any]]:
         return [self.a, self.b]

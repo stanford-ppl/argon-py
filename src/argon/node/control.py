@@ -4,8 +4,9 @@ from pydantic.dataclasses import dataclass
 
 from argon.block import Block
 from argon.op import Op
-from argon.ref import Sym
+from argon.ref import Exp, Sym
 from argon.types.boolean import Boolean
+from argon.types.null import Null
 
 
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))

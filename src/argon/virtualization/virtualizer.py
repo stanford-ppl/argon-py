@@ -92,11 +92,6 @@ def get_inputs(
     all_input_ids = set()
     for symbol in scope_symbols:
         inputs = symbol.rhs.val.underlying.inputs  # type: ignore -- symbol.rhs.val has already been checked to be a Node
-        inputs = [
-            input
-            for input in inputs
-            if input.is_node()
-        ]
         symbol_map.update({input.rhs.val.id: input for input in inputs})  # type: ignore -- input.rhs.val has already been checked to be a Node
         all_input_ids.update({input.rhs.val.id for input in inputs})  # type: ignore -- input.rhs.val has already been checked to be a Node
 

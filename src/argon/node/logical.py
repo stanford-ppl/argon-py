@@ -20,7 +20,7 @@ class Not[T](Op[T]):
 
     @property
     @typing.override
-    def inputs(self) -> typing.List[Sym[typing.Any]]:
+    def operands(self) -> typing.List[Sym[typing.Any]]:
         return [self.a]  # type: ignore
 
 
@@ -40,7 +40,7 @@ class And[T](Op[T]):
 
     @property
     @typing.override
-    def inputs(self) -> typing.List[Sym[typing.Any]]:
+    def operands(self) -> typing.List[Sym[typing.Any]]:
         return [self.a, self.b]  # type: ignore
 
 
@@ -60,7 +60,7 @@ class Or[T](Op[T]):
 
     @property
     @typing.override
-    def inputs(self) -> typing.List[Sym[typing.Any]]:
+    def operands(self) -> typing.List[Sym[typing.Any]]:
         return [self.a, self.b]  # type: ignore
 
 
@@ -80,5 +80,5 @@ class Xor[T](Op[T]):
 
     @property
     @typing.override
-    def inputs(self) -> typing.List[Sym[typing.Any]]:
+    def operands(self) -> typing.List[Sym[typing.Any]]:
         return [self.a, self.b]  # type: ignore

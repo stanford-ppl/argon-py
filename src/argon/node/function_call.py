@@ -23,7 +23,7 @@ class FunctionCall[T](Op[T]):
 
     @property
     @typing.override
-    def inputs(self) -> typing.List[Exp[typing.Any, typing.Any]]:
+    def operands(self) -> typing.List[Exp[typing.Any, typing.Any]]:
         # TODO: figure out what inputs I should use
         return self.args
 

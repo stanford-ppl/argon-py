@@ -18,15 +18,19 @@ class Op[R](ArgonMeta, abc.ABC):
     class should be subclassed to define custom operations.
     """
 
-    @abc.abstractproperty
+    @property
     def inputs(self) -> typing.List["Sym[typing.Any]"]:
+        return [operand for operand in self.operands if operand.is_node()]
+    
+    @property
+    def operands(self) -> typing.List["Sym[typing.Any]"]:
         raise NotImplementedError()
 
     def dump(self, indent_level=0) -> str:
         return str(self)
 
     def __str__(self) -> str:
-        return f"{self.__class__.__name__}({', '.join(map(str, self.inputs))})"
+        return f"{self.__class__.__name__}({', '.join(map(str, self.operands))})"
 
 
 from argon.ref import Sym
