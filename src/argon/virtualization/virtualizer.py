@@ -7,12 +7,20 @@ from argon.block import Block
 from argon.node.control import IfThenElse
 from argon.node.function_call import FunctionCall
 from argon.node.phi import Phi
-from argon.ref import Exp, Node, Ref
+from argon.node.undefined import Undefined
+from argon.ref import Exp, Ref
 from argon.srcctx import SrcCtx
 from argon.state import State, stage
 from argon.types.boolean import Boolean
 from argon.types.null import Null
 from argon.virtualization.type_mapper import concrete_to_abstract
+
+
+def stage_undefined(name, T, file_name, lineno, col_offset):
+    return stage(
+        Undefined[T](name), 
+        ctx=SrcCtx(file_name, dis.Positions(lineno=lineno, col_offset=col_offset)),
+    )
 
 
 def stage_phi(
@@ -401,7 +409,7 @@ try:
     {temp_var} = lambda _, {var} = {var}: __________argon.argon.virtualization.type_mapper.concrete_to_abstract({var})
     {temp_var_exists} = True
 except NameError:
-    {temp_var} = lambda T : __________argon.argon.state.stage(__________argon.argon.node.undefined.Undefined[T]("{var}"))
+    {temp_var} = lambda T : __________argon.argon.virtualization.virtualizer.stage_undefined('{var}', T, '{self.file_name}', {node.lineno}, {node.col_offset})
     {temp_var_exists} = False
 """
                 ).body
@@ -451,12 +459,12 @@ except NameError:
 
         # Run the else body under a different scope
         else_scope_name = self.generate_temp_var("else", "scope")
+        new_body.extend(
+            ast.parse(
+                f"{else_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()"
+            ).body
+        )
         if node.orelse:
-            new_body.extend(
-                ast.parse(
-                    f"{else_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()"
-                ).body
-            )
             new_body.append(
                 ast.With(
                     items=[
@@ -485,29 +493,92 @@ except NameError:
                 ).body
             )
 
+        # Stage the undefined variables in their respective scopes
+        if self.assigned_vars:
+            new_body.append(
+                ast.With(
+                    items=[
+                        ast.withitem(
+                            context_expr=ast.Name(id=then_scope_name, ctx=ast.Load())
+                        )
+                    ],
+                    body=[
+                        # Call {temp_var_then}({temp_var_T}) for each var in self.assigned_vars
+                        ast.Assign(
+                            targets=[
+                                ast.Name(
+                                    id=self.generate_temp_var(var, "then"),
+                                    ctx=ast.Store(),
+                                )
+                            ],
+                            value=ast.Call(
+                                func=ast.Name(
+                                    id=f"{self.generate_temp_var(var, 'then')}",
+                                    ctx=ast.Load(),
+                                ),
+                                args=[
+                                    ast.Name(
+                                        id=self.generate_temp_var(var, "T"),
+                                        ctx=ast.Load(),
+                                    )
+                                ],
+                                keywords=[],
+                            ),
+                        )
+                        for var in self.assigned_vars
+                    ],
+                )
+            )
+            new_body.append(
+                ast.With(
+                    items=[
+                        ast.withitem(
+                            context_expr=ast.Name(id=else_scope_name, ctx=ast.Load())
+                        )
+                    ],
+                    body=[
+                        # Call {temp_var_else}({temp_var_T}) for each var in self.assigned_vars
+                        ast.Assign(
+                            targets=[
+                                ast.Name(
+                                    id=self.generate_temp_var(var, "else"),
+                                    ctx=ast.Store(),
+                                )
+                            ],
+                            value=ast.Call(
+                                func=ast.Name(
+                                    id=f"{self.generate_temp_var(var, 'else')}",
+                                    ctx=ast.Load(),
+                                ),
+                                args=[
+                                    ast.Name(
+                                        id=self.generate_temp_var(var, "T"),
+                                        ctx=ast.Load(),
+                                    )
+                                ],
+                                keywords=[],
+                            ),
+                        )
+                        for var in self.assigned_vars
+                    ],
+                )
+            )
+
         # Stage if call
-        if node.orelse:
-            new_body.extend(
-                ast.parse(
-                    f"__________argon.argon.virtualization.virtualizer.stage_if('{self.file_name}', {node.lineno}, {node.col_offset}, {cond_scope_name}.scope.symbols, {then_scope_name}.scope.symbols, {else_scope_name}.scope.symbols)"
-                ).body
-            )
-        else:
-            new_body.extend(
-                ast.parse(
-                    f"__________argon.argon.virtualization.virtualizer.stage_if('{self.file_name}', {node.lineno}, {node.col_offset}, {cond_scope_name}.scope.symbols, {then_scope_name}.scope.symbols)"
-                ).body
-            )
+        new_body.extend(
+            ast.parse(
+                f"__________argon.argon.virtualization.virtualizer.stage_if('{self.file_name}', {node.lineno}, {node.col_offset}, {cond_scope_name}.scope.symbols, {then_scope_name}.scope.symbols, {else_scope_name}.scope.symbols)"
+            ).body
+        )
 
         # Stage each assigned variable be a mux of the possible values from each branch
         for var in self.assigned_vars:
             temp_var_cond = self.generate_temp_var("cond")
             temp_var_then = self.generate_temp_var(var, "then")
             temp_var_else = self.generate_temp_var(var, "else")
-            temp_var_T = self.generate_temp_var(var, "T")
             new_body.extend(
                 ast.parse(
-                    f"{var} = __________argon.argon.virtualization.virtualizer.stage_phi({temp_var_cond}, {temp_var_then}({temp_var_T}), {temp_var_else}({temp_var_T}))"
+                    f"{var} = __________argon.argon.virtualization.virtualizer.stage_phi({temp_var_cond}, {temp_var_then}, {temp_var_else})"
                 ).body
             )
 
