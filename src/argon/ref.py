@@ -143,6 +143,18 @@ class Exp[C, A](ArgonMeta, abc.ABC):
     def tp(self) -> ExpType[C, A]:
         raise NotImplementedError()
 
+    def is_bound(self) -> bool:
+        return self.rhs != None and isinstance(self.rhs.val, Bound)
+
+    def is_node(self) -> bool:
+        return self.rhs != None and isinstance(self.rhs.val, Node)
+
+    def is_const(self) -> bool:
+        return self.rhs != None and isinstance(self.rhs.val, Const)
+
+    def is_typeref(self) -> bool:
+        return self.rhs != None and isinstance(self.rhs.val, TypeRef)
+
     def dump(self, indent_level=0) -> str:
         no_indent = "|   " * indent_level
         indent = "|   " * (indent_level + 1)

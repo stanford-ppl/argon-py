@@ -77,9 +77,7 @@ def get_inputs(
     scope_symbols = [
         symbol
         for symbol in scope_symbols
-        if symbol.rhs != None
-        and isinstance(symbol.rhs.val, Node)
-        and not isinstance(symbol.rhs.val.underlying, Phi)
+        if symbol.is_node() and not isinstance(symbol.rhs.val.underlying, Phi)
     ]
 
     # We use a symbol's id instead of just the symbol objects below because symbols
@@ -97,7 +95,7 @@ def get_inputs(
         inputs = [
             input
             for input in inputs
-            if input.rhs != None and isinstance(input.rhs.val, Node)
+            if input.is_node()
         ]
         symbol_map.update({input.rhs.val.id: input for input in inputs})  # type: ignore -- input.rhs.val has already been checked to be a Node
         all_input_ids.update({input.rhs.val.id for input in inputs})  # type: ignore -- input.rhs.val has already been checked to be a Node
