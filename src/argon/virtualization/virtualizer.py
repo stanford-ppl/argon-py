@@ -349,20 +349,20 @@ class Transformer(ast.NodeTransformer):
 
         # Recursively visit the then body
         self.assigned_vars = set()
+        self.loaded_vars = set()
         node.body = [self.visit(stmt) for stmt in node.body]
         then_assigned_vars = self.assigned_vars.copy()
         then_loaded_vars = self.loaded_vars.copy()
 
         # Recursively visit the else body
         self.assigned_vars = set()
+        self.loaded_vars = set()
         node.orelse = [self.visit(stmt) for stmt in node.orelse]
         else_assigned_vars = self.assigned_vars.copy()
         else_loaded_vars = self.loaded_vars.copy()
 
         # Merge the assigned variables found
-        self.assigned_vars = (
-            cond_assigned_vars | then_assigned_vars | else_assigned_vars
-        )
+        self.assigned_vars = cond_assigned_vars | then_assigned_vars | else_assigned_vars
         self.loaded_vars = cond_loaded_vars | then_loaded_vars | else_loaded_vars
         self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
 
