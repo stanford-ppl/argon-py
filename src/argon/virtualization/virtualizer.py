@@ -1,10 +1,11 @@
 import ast
+from collections import namedtuple
 import dis
 import types
 import typing
 
 from argon.block import Block
-from argon.node.control import IfThenElse
+from argon.node.control import IfThenElse, Loop
 from argon.node.function_call import FunctionCall
 from argon.node.phi import Phi
 from argon.node.undefined import Undefined
@@ -18,7 +19,7 @@ from argon.virtualization.type_mapper import concrete_to_abstract
 
 def stage_undefined(name, T, file_name, lineno, col_offset):
     return stage(
-        Undefined[T](name), 
+        Undefined[T](name),
         ctx=SrcCtx(file_name, dis.Positions(lineno=lineno, col_offset=col_offset)),
     )
 
@@ -132,6 +133,24 @@ def stage_function_call(
     )
 
 
+def stage_loop(
+    file_name: str,
+    lineno: int,
+    col_offset: int,
+    values: typing.List[Exp[typing.Any, typing.Any]],
+    binds: typing.List[Exp[typing.Any, typing.Any]],
+    cond: typing.List[Exp[typing.Any, typing.Any]],
+    body: typing.List[Exp[typing.Any, typing.Any]],
+    outputs: namedtuple,
+) -> Ref[typing.Any, typing.Any]:
+    condBlk = Block[Boolean](get_inputs(cond), cond, cond[-1])
+    bodyBlk = Block[Null](get_inputs(body), body, Null().const(None))
+    return stage(
+        Loop(values, binds, condBlk, bodyBlk, outputs),
+        ctx=SrcCtx(file_name, dis.Positions(lineno=lineno, col_offset=col_offset)),
+    )
+
+
 class Transformer(ast.NodeTransformer):
     def __init__(self, file_name, calls, ifs, if_exps, loops):
         super().__init__()
@@ -211,6 +230,12 @@ class Transformer(ast.NodeTransformer):
 
         # Recursively visit the value being assigned
         return ast.Assign(targets=node.targets, value=self.visit(node.value))
+    
+    def visit_Break(self, node):
+        raise NotImplementedError("Does not support break statements")
+    
+    def visit_Continue(self, node):
+        raise NotImplementedError("Does not support continue statements")
 
     # This method is called for function calls
     def visit_Call(self, node):
@@ -362,7 +387,9 @@ class Transformer(ast.NodeTransformer):
         else_loaded_vars = self.loaded_vars.copy()
 
         # Merge the assigned variables found
-        self.assigned_vars = cond_assigned_vars | then_assigned_vars | else_assigned_vars
+        self.assigned_vars = (
+            cond_assigned_vars | then_assigned_vars | else_assigned_vars
+        )
         self.loaded_vars = cond_loaded_vars | then_loaded_vars | else_loaded_vars
         self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
 
@@ -627,6 +654,142 @@ except NameError:
 
         return node
 
+    def visit_While(self, node):
+        # Increment counter to ensure unique names for this while loop
+        self.counter += 1
+
+        # Properly set flags before recursive visits
+        prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
+        self.concrete_to_abstract_flag = self.loops
+
+        # Recursively visit the condition
+        node.test = self.visit(node.test)
+        cond_assigned_vars = self.assigned_vars.copy()
+        cond_loaded_vars = self.loaded_vars.copy()
+
+        # Recursively visit the body
+        self.assigned_vars = set()
+        self.loaded_vars = set()
+        node.body = [self.visit(stmt) for stmt in node.body]
+        body_assigned_vars = self.assigned_vars.copy()
+        body_loaded_vars = self.loaded_vars.copy()
+
+        if node.orelse:
+            raise NotImplementedError("Does not support else statements for loops")
+
+        # Merge the assigned variables and loaded variables found
+        self.assigned_vars = cond_assigned_vars | body_assigned_vars
+        self.loaded_vars = cond_loaded_vars | body_loaded_vars
+        self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
+
+        # Do not stage the while loop if the flag is set to False
+        # TODO: error handling if condition is Argon type
+        if not self.loops:
+            return node
+
+        # Save the condition in a temporary variable
+        new_body: typing.List[ast.stmt] = []
+
+        # Create temporary list of input values and binds
+        new_body.append(
+            ast.Assign(
+                targets=[
+                    ast.Name(id=self.generate_temp_var("values"), ctx=ast.Store())
+                ],
+                value=ast.List(elts=[], ctx=ast.Load()),
+            )
+        )
+        new_body.append(
+            ast.Assign(
+                targets=[ast.Name(id=self.generate_temp_var("binds"), ctx=ast.Store())],
+                value=ast.List(elts=[], ctx=ast.Load()),
+            )
+        )
+
+        # Create binds
+        # TODO: This part needs to be changed to only create binds for inputs
+        for var in self.loaded_vars:
+            new_body.extend(
+                ast.parse(
+                    f"""
+try:
+    {self.generate_temp_var('values')}.append(__________argon.argon.virtualization.type_mapper.concrete_to_abstract({var}))
+    {var} = __________argon.argon.virtualization.type_mapper.concrete_to_abstract({var}).bound('{var}')
+    {self.generate_temp_var('binds')}.append({var})
+except NameError:
+    pass
+"""
+                ).body
+            )
+
+        # Run the condition under a different scope
+        cond_scope_name = self.generate_temp_var("cond", "scope")
+        new_body.extend(
+            ast.parse(
+                f"{cond_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()"
+            ).body
+        )
+        new_body.append(
+            ast.With(
+                items=[
+                    ast.withitem(
+                        context_expr=ast.Name(id=cond_scope_name, ctx=ast.Load())
+                    )
+                ],
+                body=[
+                    ast.Assign(
+                        targets=[
+                            ast.Name(id=self.generate_temp_var("cond"), ctx=ast.Store())
+                        ],
+                        value=node.test,
+                    )
+                ],
+            )
+        )
+
+        # Create a new scope to run the loop body
+        loop_scope_name = self.generate_temp_var("loop", "scope")
+        new_body.extend(
+            ast.parse(
+                f"{loop_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()"
+            ).body
+        )
+        new_body.append(
+            ast.With(
+                items=[
+                    ast.withitem(
+                        context_expr=ast.Name(id=loop_scope_name, ctx=ast.Load())
+                    )
+                ],
+                body=self.modify_body2(node.body),
+            )
+        )
+        new_body.extend(
+            ast.parse(
+                f"__________argon.argon.virtualization.virtualizer.stage_loop('{self.file_name}', {node.lineno}, {node.col_offset}, {self.generate_temp_var("values")}, {self.generate_temp_var("binds")}, {cond_scope_name}.scope.symbols, {loop_scope_name}.scope.symbols, {self.generate_temp_var("loop", "outputs")})"
+            ).body
+        )
+
+        # Delete all temporary variables
+        # TODO: COMPLETE THIS PART
+        new_body.append(
+            ast.Delete(
+                targets=[ast.Name(id=self.generate_temp_var("cond"), ctx=ast.Del())]
+            )
+        )
+
+        # Replace the original while body with the new wrapped body
+        node.body = new_body
+
+        # Set the condition to True and add a break statement at the end of the body
+        # This lets us run the body just once
+        node.test = ast.Constant(value=True)
+        new_body.append(ast.Break())
+
+        self.counter -= 1
+
+        return node
+
     def generate_temp_var(self, *args) -> str:
         return self.unique_prefix + "_".join(args) + "_" + str(self.counter)
 
@@ -641,4 +804,34 @@ except NameError:
                 value=ast.Name(id=var, ctx=ast.Load()),
             )
             new_body.append(temp_assign)
+        return new_body
+
+    def modify_body2(self, body: typing.List[ast.stmt]) -> list:
+        new_body = body.copy()
+        temp_output_name = self.generate_temp_var("loop", "outputs")
+        new_body.append(
+            ast.Assign(
+                targets=[ast.Name(id=temp_output_name, ctx=ast.Store())],
+                value=ast.Call(
+                    func=ast.Call(
+                        func=ast.Name(id="namedtuple", ctx=ast.Load()),
+                        args=[
+                            ast.Constant(value=temp_output_name),
+                            ast.List(
+                                elts=[
+                                    ast.Constant(value=var)
+                                    for var in self.assigned_vars
+                                ],
+                                ctx=ast.Load(),
+                            ),
+                        ],
+                        keywords=[],
+                    ),
+                    args=[
+                        ast.Name(id=var, ctx=ast.Load()) for var in self.assigned_vars
+                    ],
+                    keywords=[],
+                ),
+            )
+        )
         return new_body

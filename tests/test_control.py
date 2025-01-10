@@ -1,5 +1,7 @@
 from argon.state import State
+from argon.types.integer import Integer
 from argon.virtualization.wrapper import argon_function
+from collections import namedtuple
 
 
 @argon_function(calls=False, ifs=False)
@@ -61,4 +63,28 @@ def test_ifs():
         ifs.virtualized.call_transformed()
 
     print(f"\ntest_ifs")
+    print(state)
+
+
+@argon_function(loops=True)
+def loops():
+    a = 0
+    b = 1
+    c = 2 if True else 3
+    while a < 10:
+        a = 1
+        a = a + 1
+        a = a + 2
+        b = b + 2
+        d = c + 1
+        e = 1
+        f = e + 1
+
+
+def test_loops():
+    state = State()
+    with state:
+        loops.virtualized.call_transformed()
+
+    print(f"\ntest_loops")
     print(state)
