@@ -151,6 +151,34 @@ def stage_loop(
     )
 
 
+class VariableTracker:
+    def __init__(self):
+        self.write_set_stack = [set()]
+        self.read_set_stack = [set()]
+
+    def push_context(self):
+        self.write_set_stack.append(set())
+        self.read_set_stack.append(set())
+
+    def pop_context(self):
+        curr_write_set = self.write_set_stack.pop()
+        self.current_write_set().update(curr_write_set)
+        curr_read_set = self.read_set_stack.pop()
+        self.current_read_set().update(curr_read_set)
+
+    def current_write_set(self):
+        return self.write_set_stack[-1]
+
+    def current_read_set(self):
+        return self.read_set_stack[-1]
+
+    def add_written_var(self, var):
+        self.current_write_set().add(var)
+
+    def add_read_var(self, var):
+        self.current_read_set().add(var)
+
+
 class Transformer(ast.NodeTransformer):
     def __init__(self, file_name, calls, ifs, if_exps, loops):
         super().__init__()
@@ -162,8 +190,7 @@ class Transformer(ast.NodeTransformer):
         self.if_exps = if_exps
         self.loops = loops
         self.concrete_to_abstract_flag = False
-        self.assigned_vars = set()
-        self.loaded_vars = set()
+        self.variable_tracker = VariableTracker()
 
     def concrete_to_abstract(self, node):
         return ast.Call(
@@ -189,23 +216,9 @@ class Transformer(ast.NodeTransformer):
         )
 
     def visit(self, node):
-        # Save current assigned_vars and start a fresh set for this node
-        prev_assigned_vars = self.assigned_vars.copy()
-        self.assigned_vars = set()
-
-        # Do the same for loaded_vars
-        prev_loaded_vars = self.loaded_vars.copy()
-        self.loaded_vars = set()
-
-        # Traverse the node and its children
+        self.variable_tracker.push_context()
         node = super().visit(node)
-
-        # Merge the assigned variables found in this node with the previous set
-        self.assigned_vars = prev_assigned_vars | self.assigned_vars
-
-        # Merge the loaded variables found in this node with the previous set
-        self.loaded_vars = prev_loaded_vars | self.loaded_vars
-
+        self.variable_tracker.pop_context()
         return node
 
     def visit_Constant(self, node):
@@ -216,7 +229,7 @@ class Transformer(ast.NodeTransformer):
     def visit_Name(self, node):
         # Save the loaded variables
         if isinstance(node.ctx, ast.Load):
-            self.loaded_vars.add(node.id)
+            self.variable_tracker.add_read_var(node.id)
 
         if self.concrete_to_abstract_flag:
             return self.concrete_to_abstract(node)
@@ -226,14 +239,14 @@ class Transformer(ast.NodeTransformer):
         # Save the assigned variables
         for target in node.targets:
             if isinstance(target, ast.Name):
-                self.assigned_vars.add(target.id)
+                self.variable_tracker.add_written_var(target.id)
 
         # Recursively visit the value being assigned
         return ast.Assign(targets=node.targets, value=self.visit(node.value))
-    
+
     def visit_Break(self, node):
         raise NotImplementedError("Does not support break statements")
-    
+
     def visit_Continue(self, node):
         raise NotImplementedError("Does not support continue statements")
 
@@ -367,30 +380,26 @@ class Transformer(ast.NodeTransformer):
         self.concrete_to_abstract_flag = self.ifs
 
         # Recursively visit the condition
-        # self.generic_visit(node)
+        self.variable_tracker.push_context()
         node.test = self.visit(node.test)
-        cond_assigned_vars = self.assigned_vars.copy()
-        cond_loaded_vars = self.loaded_vars.copy()
+        cond_write_set = self.variable_tracker.current_write_set()
+        cond_read_set = self.variable_tracker.current_read_set()
+        self.variable_tracker.pop_context()
 
         # Recursively visit the then body
-        self.assigned_vars = set()
-        self.loaded_vars = set()
+        self.variable_tracker.push_context()
         node.body = [self.visit(stmt) for stmt in node.body]
-        then_assigned_vars = self.assigned_vars.copy()
-        then_loaded_vars = self.loaded_vars.copy()
+        then_write_set = self.variable_tracker.current_write_set()
+        then_read_set = self.variable_tracker.current_read_set()
+        self.variable_tracker.pop_context()
 
         # Recursively visit the else body
-        self.assigned_vars = set()
-        self.loaded_vars = set()
+        self.variable_tracker.push_context()
         node.orelse = [self.visit(stmt) for stmt in node.orelse]
-        else_assigned_vars = self.assigned_vars.copy()
-        else_loaded_vars = self.loaded_vars.copy()
+        else_write_set = self.variable_tracker.current_write_set()
+        else_read_set = self.variable_tracker.current_read_set()
+        self.variable_tracker.pop_context()
 
-        # Merge the assigned variables found
-        self.assigned_vars = (
-            cond_assigned_vars | then_assigned_vars | else_assigned_vars
-        )
-        self.loaded_vars = cond_loaded_vars | then_loaded_vars | else_loaded_vars
         self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
 
         # Do not stage the if statement if the flag is set to False
@@ -426,7 +435,7 @@ class Transformer(ast.NodeTransformer):
         )
 
         # Save the previous value of variables if had existed, otherwise set them to Undefined
-        for var in self.assigned_vars:
+        for var in self.variable_tracker.current_write_set():
             temp_var = self.generate_temp_var(var, "old")
             temp_var_exists = self.generate_temp_var(var, "old", "exists")
             new_body.extend(
@@ -457,13 +466,13 @@ except NameError:
                     )
                 ],
                 body=self.modify_body(
-                    node.body, "then", then_assigned_vars
+                    node.body, "then", then_write_set
                 ),  # For all variables in the 'then' body, assign temp_var = var at the end of the body
             )
         )
 
         # Make result from 'then' body a lambda and revert variables back to their original value before the 'then' body
-        for var in self.assigned_vars:
+        for var in self.variable_tracker.current_write_set():
             temp_var_T = self.generate_temp_var(var, "T")
             temp_var_then = self.generate_temp_var(var, "then")
             temp_var_old = self.generate_temp_var(var, "old")
@@ -499,12 +508,12 @@ except NameError:
                             context_expr=ast.Name(id=else_scope_name, ctx=ast.Load())
                         )
                     ],
-                    body=self.modify_body(node.orelse, "else", else_assigned_vars),
+                    body=self.modify_body(node.orelse, "else", else_write_set),
                 )
             )
 
         # Make result from 'else' body a lambda
-        for var in self.assigned_vars:
+        for var in self.variable_tracker.current_write_set():
             temp_var_T = self.generate_temp_var(var, "T")
             temp_var_else = self.generate_temp_var(var, "else")
             temp_var_old = self.generate_temp_var(var, "old")
@@ -521,7 +530,7 @@ except NameError:
             )
 
         # Stage the undefined variables in their respective scopes
-        if self.assigned_vars:
+        if self.variable_tracker.current_write_set():
             new_body.append(
                 ast.With(
                     items=[
@@ -552,7 +561,7 @@ except NameError:
                                 keywords=[],
                             ),
                         )
-                        for var in self.assigned_vars
+                        for var in self.variable_tracker.current_write_set()
                     ],
                 )
             )
@@ -586,7 +595,7 @@ except NameError:
                                 keywords=[],
                             ),
                         )
-                        for var in self.assigned_vars
+                        for var in self.variable_tracker.current_write_set()
                     ],
                 )
             )
@@ -599,7 +608,7 @@ except NameError:
         )
 
         # Stage each assigned variable be a mux of the possible values from each branch
-        for var in self.assigned_vars:
+        for var in self.variable_tracker.current_write_set():
             temp_var_cond = self.generate_temp_var("cond")
             temp_var_then = self.generate_temp_var(var, "then")
             temp_var_else = self.generate_temp_var(var, "else")
@@ -615,7 +624,7 @@ except NameError:
                 targets=[ast.Name(id=self.generate_temp_var("cond"), ctx=ast.Del())]
             )
         )
-        for var in self.assigned_vars:
+        for var in self.variable_tracker.current_write_set():
             temp_var_old = self.generate_temp_var(var, "old")
             temp_var_old_exists = self.generate_temp_var(var, "old", "exists")
             temp_var_then = self.generate_temp_var(var, "then")
@@ -663,23 +672,22 @@ except NameError:
         self.concrete_to_abstract_flag = self.loops
 
         # Recursively visit the condition
+        self.variable_tracker.push_context()
         node.test = self.visit(node.test)
-        cond_assigned_vars = self.assigned_vars.copy()
-        cond_loaded_vars = self.loaded_vars.copy()
+        cond_write_set = self.variable_tracker.current_write_set()
+        cond_read_set = self.variable_tracker.current_read_set()
+        self.variable_tracker.pop_context()
 
         # Recursively visit the body
-        self.assigned_vars = set()
-        self.loaded_vars = set()
+        self.variable_tracker.push_context()
         node.body = [self.visit(stmt) for stmt in node.body]
-        body_assigned_vars = self.assigned_vars.copy()
-        body_loaded_vars = self.loaded_vars.copy()
+        body_write_set = self.variable_tracker.current_write_set()
+        body_read_set = self.variable_tracker.current_read_set()
+        self.variable_tracker.pop_context()
 
         if node.orelse:
             raise NotImplementedError("Does not support else statements for loops")
 
-        # Merge the assigned variables and loaded variables found
-        self.assigned_vars = cond_assigned_vars | body_assigned_vars
-        self.loaded_vars = cond_loaded_vars | body_loaded_vars
         self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
 
         # Do not stage the while loop if the flag is set to False
@@ -708,7 +716,7 @@ except NameError:
 
         # Create binds
         # TODO: This part needs to be changed to only create binds for inputs
-        for var in self.loaded_vars:
+        for var in self.variable_tracker.current_read_set():
             new_body.extend(
                 ast.parse(
                     f"""
@@ -820,7 +828,7 @@ except NameError:
                             ast.List(
                                 elts=[
                                     ast.Constant(value=var)
-                                    for var in self.assigned_vars
+                                    for var in self.variable_tracker.current_write_set()
                                 ],
                                 ctx=ast.Load(),
                             ),
@@ -828,7 +836,8 @@ except NameError:
                         keywords=[],
                     ),
                     args=[
-                        ast.Name(id=var, ctx=ast.Load()) for var in self.assigned_vars
+                        ast.Name(id=var, ctx=ast.Load())
+                        for var in self.variable_tracker.current_write_set()
                     ],
                     keywords=[],
                 ),
