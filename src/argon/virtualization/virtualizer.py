@@ -155,6 +155,7 @@ class VariableTracker:
     def __init__(self):
         self.write_set_stack = [set()]
         self.read_set_stack = [set()]
+        self.binds_stack = []
 
     def push_context(self):
         self.write_set_stack.append(set())
@@ -166,17 +167,38 @@ class VariableTracker:
         curr_read_set = self.read_set_stack.pop()
         self.current_read_set().update(curr_read_set)
 
+    def push_binds_context(self):
+        self.binds_stack.append(set())
+
+    def pop_binds_context(self):
+        self.binds_stack.pop()
+
     def current_write_set(self):
         return self.write_set_stack[-1]
 
     def current_read_set(self):
         return self.read_set_stack[-1]
 
+    def current_binds(self):
+        return self.binds_stack[-1]
+
     def add_written_var(self, var):
+        if (
+            (len(self.write_set_stack) > 1 and len(self.read_set_stack) > 1)
+            and (
+                var not in self.write_set_stack[-1]
+                and var not in self.write_set_stack[-2]
+            )
+            and (var in self.read_set_stack[-1] or var in self.read_set_stack[-2])
+        ):
+            self.add_bind(var)
         self.current_write_set().add(var)
 
     def add_read_var(self, var):
         self.current_read_set().add(var)
+
+    def add_bind(self, var):
+        self.current_binds().add(var)
 
 
 class Transformer(ast.NodeTransformer):
@@ -215,12 +237,6 @@ class Transformer(ast.NodeTransformer):
             keywords=[],
         )
 
-    def visit(self, node):
-        self.variable_tracker.push_context()
-        node = super().visit(node)
-        self.variable_tracker.pop_context()
-        return node
-
     def visit_Constant(self, node):
         if self.concrete_to_abstract_flag:
             return self.concrete_to_abstract(node)
@@ -236,13 +252,25 @@ class Transformer(ast.NodeTransformer):
         return node
 
     def visit_Assign(self, node):
-        # Save the assigned variables
-        for target in node.targets:
-            if isinstance(target, ast.Name):
-                self.variable_tracker.add_written_var(target.id)
+        # Visit RHS of assignment
+        node.value = self.visit(node.value)
 
-        # Recursively visit the value being assigned
-        return ast.Assign(targets=node.targets, value=self.visit(node.value))
+        # Recursively process each target to extract all written variables
+        for target in node.targets:
+            self._process_target(target)
+
+        return node
+
+    def _process_target(self, target):
+        # Handle simple variable assignment
+        if isinstance(target, ast.Name):
+            self.variable_tracker.add_written_var(target.id)
+        # Handle tuple or list unpacking
+        elif isinstance(target, (ast.Tuple, ast.List)):
+            for element in target.elts:
+                self._process_target(element)
+        else:
+            raise NotImplementedError("Unsupported target type on LHS of assignment")
 
     def visit_Break(self, node):
         raise NotImplementedError("Does not support break statements")
@@ -378,6 +406,7 @@ class Transformer(ast.NodeTransformer):
         # Properly set flags before recursive visits
         prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
         self.concrete_to_abstract_flag = self.ifs
+        self.variable_tracker.push_context()
 
         # Recursively visit the condition
         self.variable_tracker.push_context()
@@ -399,13 +428,6 @@ class Transformer(ast.NodeTransformer):
         else_write_set = self.variable_tracker.current_write_set()
         else_read_set = self.variable_tracker.current_read_set()
         self.variable_tracker.pop_context()
-
-        self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
-
-        # Do not stage the if statement if the flag is set to False
-        # TODO: error handling if condition is Argon type
-        if not self.ifs:
-            return node
 
         new_body: typing.List[ast.stmt] = []
 
@@ -652,14 +674,19 @@ except NameError:
                 ast.Delete(targets=[ast.Name(id=else_scope_name, ctx=ast.Del())])
             )
 
-        # Replace the original if/else body with the new wrapped body
-        node.body = new_body
-        node.orelse = []
+        # Do not stage the if statement if the flag is set to False
+        # TODO: error handling if condition is Argon type
+        if self.ifs:
+            # Replace the original if/else body with the new wrapped body
+            node.body = new_body
+            node.orelse = []
 
-        # Set the condition to True to run both the then and else bodies under different scopes
-        node.test = ast.Constant(value=True)
+            # Set the condition to True to run both the then and else bodies under different scopes
+            node.test = ast.Constant(value=True)
 
         self.counter -= 1
+        self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
+        self.variable_tracker.pop_context()
 
         return node
 
@@ -670,6 +697,8 @@ except NameError:
         # Properly set flags before recursive visits
         prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
         self.concrete_to_abstract_flag = self.loops
+        self.variable_tracker.push_context()
+        self.variable_tracker.push_binds_context()
 
         # Recursively visit the condition
         self.variable_tracker.push_context()
@@ -688,14 +717,6 @@ except NameError:
         if node.orelse:
             raise NotImplementedError("Does not support else statements for loops")
 
-        self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
-
-        # Do not stage the while loop if the flag is set to False
-        # TODO: error handling if condition is Argon type
-        if not self.loops:
-            return node
-
-        # Save the condition in a temporary variable
         new_body: typing.List[ast.stmt] = []
 
         # Create temporary list of input values and binds
@@ -716,7 +737,7 @@ except NameError:
 
         # Create binds
         # TODO: This part needs to be changed to only create binds for inputs
-        for var in self.variable_tracker.current_read_set():
+        for var in self.variable_tracker.current_binds():
             new_body.extend(
                 ast.parse(
                     f"""
@@ -786,15 +807,22 @@ except NameError:
             )
         )
 
-        # Replace the original while body with the new wrapped body
-        node.body = new_body
-
-        # Set the condition to True and add a break statement at the end of the body
-        # This lets us run the body just once
-        node.test = ast.Constant(value=True)
         new_body.append(ast.Break())
 
+        # Do not stage the while loop if the flag is set to False
+        # TODO: error handling if condition is Argon type
+        if self.loops:
+            # Replace the original while body with the new wrapped body
+            node.body = new_body
+
+            # Set the condition to True and add a break statement at the end of the body
+            # This lets us run the body just once
+            node.test = ast.Constant(value=True)
+
         self.counter -= 1
+        self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
+        self.variable_tracker.pop_context()
+        self.variable_tracker.pop_binds_context()
 
         return node
 
