@@ -280,6 +280,17 @@ class Transformer(ast.NodeTransformer):
         else:
             raise NotImplementedError("Unsupported target type on LHS of assignment")
 
+    def visit_NamedExpr(self, node):
+        # Visit RHS of assignment
+        node.value = self.visit(node.value)
+
+        if isinstance(node.target, ast.Name):
+            self.variable_tracker.add_written_var(node.target.id)
+        else:
+            raise NotImplementedError("Only support single-variable assignments for walrus operators")
+
+        return node
+
     def visit_Break(self, node):
         raise NotImplementedError("Does not support break statements")
 
