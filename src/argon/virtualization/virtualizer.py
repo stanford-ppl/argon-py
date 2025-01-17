@@ -74,13 +74,18 @@ def stage_if(
     file_name: str,
     lineno: int,
     col_offset: int,
-    cond: typing.List[Exp[typing.Any, typing.Any]],
-    thenBody: typing.List[Exp[typing.Any, typing.Any]],
-    elseBody: typing.List[Exp[typing.Any, typing.Any]] = [],
+    cond_scope_symbols: typing.List[Exp[typing.Any, typing.Any]],
+    cond: Exp[typing.Any, typing.Any],
+    then_scope_symbols: typing.List[Exp[typing.Any, typing.Any]],
+    else_scope_symbols: typing.List[Exp[typing.Any, typing.Any]] = [],
 ) -> Ref[typing.Any, typing.Any]:
-    condBlk = Block[Boolean](get_inputs(cond), cond, cond[-1])
-    thenBlk = Block[Null](get_inputs(thenBody), thenBody, Null().const(None))
-    elseBlk = Block[Null](get_inputs(elseBody), elseBody, Null().const(None))
+    condBlk = Block[Boolean](get_inputs(cond_scope_symbols), cond_scope_symbols, cond)
+    thenBlk = Block[Null](
+        get_inputs(then_scope_symbols), then_scope_symbols, Null().const(None)
+    )
+    elseBlk = Block[Null](
+        get_inputs(else_scope_symbols), else_scope_symbols, Null().const(None)
+    )
     return stage(
         IfThenElse[Null](condBlk, thenBlk, elseBlk),
         ctx=SrcCtx(file_name, dis.Positions(lineno=lineno, col_offset=col_offset)),
@@ -139,12 +144,15 @@ def stage_loop(
     col_offset: int,
     values: typing.List[Exp[typing.Any, typing.Any]],
     binds: typing.List[Exp[typing.Any, typing.Any]],
-    cond: typing.List[Exp[typing.Any, typing.Any]],
-    body: typing.List[Exp[typing.Any, typing.Any]],
+    cond_scope_symbols: typing.List[Exp[typing.Any, typing.Any]],
+    cond: Exp[typing.Any, typing.Any],
+    loop_scope_symbols: typing.List[Exp[typing.Any, typing.Any]],
     outputs: namedtuple,
 ) -> Ref[typing.Any, typing.Any]:
-    condBlk = Block[Boolean](get_inputs(cond), cond, cond[-1])
-    bodyBlk = Block[Null](get_inputs(body), body, Null().const(None))
+    condBlk = Block[Boolean](get_inputs(cond_scope_symbols), cond_scope_symbols, cond)
+    bodyBlk = Block[Null](
+        get_inputs(loop_scope_symbols), loop_scope_symbols, Null().const(None)
+    )
     return stage(
         Loop(values, binds, condBlk, bodyBlk, outputs),
         ctx=SrcCtx(file_name, dis.Positions(lineno=lineno, col_offset=col_offset)),
@@ -433,6 +441,7 @@ class Transformer(ast.NodeTransformer):
 
         # Run the condition under a different scope
         cond_scope_name = self.generate_temp_var("cond", "scope")
+        cond_name = self.generate_temp_var("cond")
         new_body.extend(
             ast.parse(
                 f"{cond_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()"
@@ -447,9 +456,7 @@ class Transformer(ast.NodeTransformer):
                 ],
                 body=[
                     ast.Assign(
-                        targets=[
-                            ast.Name(id=self.generate_temp_var("cond"), ctx=ast.Store())
-                        ],
+                        targets=[ast.Name(id=cond_name, ctx=ast.Store())],
                         value=node.test,
                     )
                 ],
@@ -625,27 +632,22 @@ except NameError:
         # Stage if call
         new_body.extend(
             ast.parse(
-                f"__________argon.argon.virtualization.virtualizer.stage_if('{self.file_name}', {node.lineno}, {node.col_offset}, {cond_scope_name}.scope.symbols, {then_scope_name}.scope.symbols, {else_scope_name}.scope.symbols)"
+                f"__________argon.argon.virtualization.virtualizer.stage_if('{self.file_name}', {node.lineno}, {node.col_offset}, {cond_scope_name}.scope.symbols, {cond_name}, {then_scope_name}.scope.symbols, {else_scope_name}.scope.symbols)"
             ).body
         )
 
         # Stage each assigned variable be a mux of the possible values from each branch
         for var in self.variable_tracker.current_write_set():
-            temp_var_cond = self.generate_temp_var("cond")
             temp_var_then = self.generate_temp_var(var, "then")
             temp_var_else = self.generate_temp_var(var, "else")
             new_body.extend(
                 ast.parse(
-                    f"{var} = __________argon.argon.virtualization.virtualizer.stage_phi({temp_var_cond}, {temp_var_then}, {temp_var_else})"
+                    f"{var} = __________argon.argon.virtualization.virtualizer.stage_phi({cond_name}, {temp_var_then}, {temp_var_else})"
                 ).body
             )
 
         # Delete all temporary variables
-        new_body.append(
-            ast.Delete(
-                targets=[ast.Name(id=self.generate_temp_var("cond"), ctx=ast.Del())]
-            )
-        )
+        new_body.append(ast.Delete(targets=[ast.Name(id=cond_name, ctx=ast.Del())]))
         for var in self.variable_tracker.current_write_set():
             temp_var_old = self.generate_temp_var(var, "old")
             temp_var_old_exists = self.generate_temp_var(var, "old", "exists")
@@ -720,17 +722,17 @@ except NameError:
         new_body: typing.List[ast.stmt] = []
 
         # Create temporary list of input values and binds
+        values_name = self.generate_temp_var("values")
+        binds_name = self.generate_temp_var("binds")
         new_body.append(
             ast.Assign(
-                targets=[
-                    ast.Name(id=self.generate_temp_var("values"), ctx=ast.Store())
-                ],
+                targets=[ast.Name(id=values_name, ctx=ast.Store())],
                 value=ast.List(elts=[], ctx=ast.Load()),
             )
         )
         new_body.append(
             ast.Assign(
-                targets=[ast.Name(id=self.generate_temp_var("binds"), ctx=ast.Store())],
+                targets=[ast.Name(id=binds_name, ctx=ast.Store())],
                 value=ast.List(elts=[], ctx=ast.Load()),
             )
         )
@@ -742,9 +744,9 @@ except NameError:
                 ast.parse(
                     f"""
 try:
-    {self.generate_temp_var('values')}.append(__________argon.argon.virtualization.type_mapper.concrete_to_abstract({var}))
+    {values_name}.append(__________argon.argon.virtualization.type_mapper.concrete_to_abstract({var}))
     {var} = __________argon.argon.virtualization.type_mapper.concrete_to_abstract({var}).bound('{var}')
-    {self.generate_temp_var('binds')}.append({var})
+    {binds_name}.append({var})
 except NameError:
     pass
 """
@@ -753,6 +755,7 @@ except NameError:
 
         # Run the condition under a different scope
         cond_scope_name = self.generate_temp_var("cond", "scope")
+        cond_name = self.generate_temp_var("cond")
         new_body.extend(
             ast.parse(
                 f"{cond_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()"
@@ -767,9 +770,7 @@ except NameError:
                 ],
                 body=[
                     ast.Assign(
-                        targets=[
-                            ast.Name(id=self.generate_temp_var("cond"), ctx=ast.Store())
-                        ],
+                        targets=[ast.Name(id=cond_name, ctx=ast.Store())],
                         value=node.test,
                     )
                 ],
@@ -783,6 +784,34 @@ except NameError:
                 f"{loop_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()"
             ).body
         )
+        loop_outputs_name = self.generate_temp_var("loop", "outputs")
+        loop_body = node.body.copy()
+        loop_body.append(  # The loop body should be the original loop body + the following line to assign the loop outputs
+            ast.Assign(
+                targets=[ast.Name(id=loop_outputs_name, ctx=ast.Store())],
+                value=ast.Call(
+                    func=ast.Call(
+                        func=ast.Name(id="namedtuple", ctx=ast.Load()),
+                        args=[
+                            ast.Constant(value=loop_outputs_name),
+                            ast.List(
+                                elts=[
+                                    ast.Constant(value=var)
+                                    for var in self.variable_tracker.current_write_set()
+                                ],
+                                ctx=ast.Load(),
+                            ),
+                        ],
+                        keywords=[],
+                    ),
+                    args=[
+                        ast.Name(id=var, ctx=ast.Load())
+                        for var in self.variable_tracker.current_write_set()
+                    ],
+                    keywords=[],
+                ),
+            )
+        )
         new_body.append(
             ast.With(
                 items=[
@@ -790,21 +819,30 @@ except NameError:
                         context_expr=ast.Name(id=loop_scope_name, ctx=ast.Load())
                     )
                 ],
-                body=self.modify_body2(node.body),
+                body=loop_body,
             )
         )
+
+        # Stage the loop
         new_body.extend(
             ast.parse(
-                f"__________argon.argon.virtualization.virtualizer.stage_loop('{self.file_name}', {node.lineno}, {node.col_offset}, {self.generate_temp_var("values")}, {self.generate_temp_var("binds")}, {cond_scope_name}.scope.symbols, {loop_scope_name}.scope.symbols, {self.generate_temp_var("loop", "outputs")})"
+                f"__________argon.argon.virtualization.virtualizer.stage_loop('{self.file_name}', {node.lineno}, {node.col_offset}, {values_name}, {binds_name}, {cond_scope_name}.scope.symbols, {cond_name}, {loop_scope_name}.scope.symbols, {loop_outputs_name})"
             ).body
         )
 
         # Delete all temporary variables
         # TODO: COMPLETE THIS PART
+        new_body.append(ast.Delete(targets=[ast.Name(id=values_name, ctx=ast.Del())]))
+        new_body.append(ast.Delete(targets=[ast.Name(id=binds_name, ctx=ast.Del())]))
         new_body.append(
-            ast.Delete(
-                targets=[ast.Name(id=self.generate_temp_var("cond"), ctx=ast.Del())]
-            )
+            ast.Delete(targets=[ast.Name(id=cond_scope_name, ctx=ast.Del())])
+        )
+        new_body.append(ast.Delete(targets=[ast.Name(id=cond_name, ctx=ast.Del())]))
+        new_body.append(
+            ast.Delete(targets=[ast.Name(id=loop_scope_name, ctx=ast.Del())])
+        )
+        new_body.append(
+            ast.Delete(targets=[ast.Name(id=loop_outputs_name, ctx=ast.Del())])
         )
 
         new_body.append(ast.Break())
@@ -840,35 +878,4 @@ except NameError:
                 value=ast.Name(id=var, ctx=ast.Load()),
             )
             new_body.append(temp_assign)
-        return new_body
-
-    def modify_body2(self, body: typing.List[ast.stmt]) -> list:
-        new_body = body.copy()
-        temp_output_name = self.generate_temp_var("loop", "outputs")
-        new_body.append(
-            ast.Assign(
-                targets=[ast.Name(id=temp_output_name, ctx=ast.Store())],
-                value=ast.Call(
-                    func=ast.Call(
-                        func=ast.Name(id="namedtuple", ctx=ast.Load()),
-                        args=[
-                            ast.Constant(value=temp_output_name),
-                            ast.List(
-                                elts=[
-                                    ast.Constant(value=var)
-                                    for var in self.variable_tracker.current_write_set()
-                                ],
-                                ctx=ast.Load(),
-                            ),
-                        ],
-                        keywords=[],
-                    ),
-                    args=[
-                        ast.Name(id=var, ctx=ast.Load())
-                        for var in self.variable_tracker.current_write_set()
-                    ],
-                    keywords=[],
-                ),
-            )
-        )
         return new_body
