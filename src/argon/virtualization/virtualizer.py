@@ -83,10 +83,14 @@ def stage_if(
         cond_scope_context.scope.inputs, cond_scope_context.scope.symbols, cond
     )
     thenBlk = Block[Null](
-        then_scope_context.scope.inputs, then_scope_context.scope.symbols, Null().const(None),
+        then_scope_context.scope.inputs,
+        then_scope_context.scope.symbols,
+        Null().const(None),
     )
     elseBlk = Block[Null](
-        else_scope_context.scope.inputs, else_scope_context.scope.symbols, Null().const(None),
+        else_scope_context.scope.inputs,
+        else_scope_context.scope.symbols,
+        Null().const(None),
     )
     return stage(
         IfThenElse[Null](condBlk, thenBlk, elseBlk),
@@ -125,7 +129,9 @@ def stage_loop(
         cond_scope_context.scope.inputs, cond_scope_context.scope.symbols, cond
     )
     bodyBlk = Block[Null](
-        loop_scope_context.scope.inputs, loop_scope_context.scope.symbols, Null().const(None)
+        loop_scope_context.scope.inputs,
+        loop_scope_context.scope.symbols,
+        Null().const(None),
     )
     return stage(
         Loop(values, binds, condBlk, bodyBlk, outputs),
@@ -478,7 +484,7 @@ class Transformer(ast.NodeTransformer):
         )
 
         # Save the previous value of variables if had existed, otherwise set them to Undefined
-        for var in self.variable_tracker.current_write_set():
+        for var in then_write_set | else_write_set:
             temp_var = self.generate_temp_var(var, "old")
             temp_var_exists = self.generate_temp_var(var, "old", "exists")
             new_body.extend(
@@ -515,7 +521,7 @@ except NameError:
         )
 
         # Make result from 'then' body a lambda and revert variables back to their original value before the 'then' body
-        for var in self.variable_tracker.current_write_set():
+        for var in then_write_set | else_write_set:
             temp_var_T = self.generate_temp_var(var, "T")
             temp_var_then = self.generate_temp_var(var, "then")
             temp_var_old = self.generate_temp_var(var, "old")
@@ -556,7 +562,7 @@ except NameError:
             )
 
         # Make result from 'else' body a lambda
-        for var in self.variable_tracker.current_write_set():
+        for var in then_write_set | else_write_set:
             temp_var_T = self.generate_temp_var(var, "T")
             temp_var_else = self.generate_temp_var(var, "else")
             temp_var_old = self.generate_temp_var(var, "old")
@@ -604,7 +610,7 @@ except NameError:
                                 keywords=[],
                             ),
                         )
-                        for var in self.variable_tracker.current_write_set()
+                        for var in then_write_set | else_write_set
                     ],
                 )
             )
@@ -638,7 +644,7 @@ except NameError:
                                 keywords=[],
                             ),
                         )
-                        for var in self.variable_tracker.current_write_set()
+                        for var in then_write_set | else_write_set
                     ],
                 )
             )
@@ -651,7 +657,7 @@ except NameError:
         )
 
         # Stage each assigned variable be a mux of the possible values from each branch
-        for var in self.variable_tracker.current_write_set():
+        for var in then_write_set | else_write_set:
             temp_var_then = self.generate_temp_var(var, "then")
             temp_var_else = self.generate_temp_var(var, "else")
             new_body.extend(
@@ -662,7 +668,7 @@ except NameError:
 
         # Delete all temporary variables
         new_body.append(ast.Delete(targets=[ast.Name(id=cond_name, ctx=ast.Del())]))
-        for var in self.variable_tracker.current_write_set():
+        for var in then_write_set | else_write_set:
             temp_var_old = self.generate_temp_var(var, "old")
             temp_var_old_exists = self.generate_temp_var(var, "old", "exists")
             temp_var_then = self.generate_temp_var(var, "then")
