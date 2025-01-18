@@ -47,17 +47,15 @@ def function_C_to_A(
     # get the return type of a function by actually calling it
     # TODO: add some check to see if we've already run it with args of the same type
     param_names = c_with_virt.virtualized.get_param_names()
-    scope = State.get_current_state().new_scope()
-    with scope:
+    scope_context = State.get_current_state().new_scope()
+    with scope_context:
         bound_args = [arg.bound(name) for arg, name in zip(args, param_names)]
         ret = c_with_virt.virtualized.call_transformed(*bound_args)
         ret = concrete_to_abstract(ret)
 
     name = c_with_virt.virtualized.get_function_name()
 
-    from argon.virtualization.virtualizer import get_inputs
-
-    body = Block[ret.A](get_inputs(scope.scope.symbols), scope.scope.symbols, ret)
+    body = Block[ret.A](scope_context.scope.inputs, scope_context.scope.symbols, ret)
 
     from argon.node.function_new import FunctionNew
 

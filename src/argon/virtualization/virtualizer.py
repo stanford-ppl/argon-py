@@ -11,7 +11,7 @@ from argon.node.phi import Phi
 from argon.node.undefined import Undefined
 from argon.ref import Exp, Ref
 from argon.srcctx import SrcCtx
-from argon.state import State, stage
+from argon.state import ScopeContext, State, stage
 from argon.types.boolean import Boolean
 from argon.types.null import Null
 from argon.virtualization.type_mapper import concrete_to_abstract
@@ -41,14 +41,14 @@ def stage_if_exp_with_scopes(
 ) -> Ref[typing.Any, typing.Any]:
     # Execute the bodies in separate scopes
     state = State.get_current_state()
-    cond_scope = state.new_scope()
-    with cond_scope:
+    cond_scope_context = state.new_scope()
+    with cond_scope_context:
         cond: Exp[typing.Any, typing.Any] = condLambda()
-    then_scope = state.new_scope()
-    with then_scope:
+    then_scope_context = state.new_scope()
+    with then_scope_context:
         thenBody: Exp[typing.Any, typing.Any] = thenBodyLambda()
-    else_scope = state.new_scope()
-    with else_scope:
+    else_scope_context = state.new_scope()
+    with else_scope_context:
         elseBody: Exp[typing.Any, typing.Any] = elseBodyLambda()
 
     # Type check
@@ -56,13 +56,13 @@ def stage_if_exp_with_scopes(
         raise TypeError(f"Type mismatch: {thenBody.tp.A} != {elseBody.tp.A}")
 
     condBlk = Block[Boolean](
-        get_inputs(cond_scope.scope.symbols), cond_scope.scope.symbols, cond
+        cond_scope_context.scope.inputs, cond_scope_context.scope.symbols, cond
     )
     thenBlk = Block[thenBody.tp.A](
-        get_inputs(then_scope.scope.symbols), then_scope.scope.symbols, thenBody
+        then_scope_context.scope.inputs, then_scope_context.scope.symbols, thenBody
     )
     elseBlk = Block[thenBody.tp.A](
-        get_inputs(else_scope.scope.symbols), else_scope.scope.symbols, elseBody
+        else_scope_context.scope.inputs, else_scope_context.scope.symbols, elseBody
     )
 
     return stage(
@@ -74,52 +74,24 @@ def stage_if(
     file_name: str,
     lineno: int,
     col_offset: int,
-    cond_scope_symbols: typing.List[Exp[typing.Any, typing.Any]],
+    cond_scope_context: ScopeContext,
     cond: Exp[typing.Any, typing.Any],
-    then_scope_symbols: typing.List[Exp[typing.Any, typing.Any]],
-    else_scope_symbols: typing.List[Exp[typing.Any, typing.Any]] = [],
+    then_scope_context: ScopeContext,
+    else_scope_context: ScopeContext,
 ) -> Ref[typing.Any, typing.Any]:
-    condBlk = Block[Boolean](get_inputs(cond_scope_symbols), cond_scope_symbols, cond)
+    condBlk = Block[Boolean](
+        cond_scope_context.scope.inputs, cond_scope_context.scope.symbols, cond
+    )
     thenBlk = Block[Null](
-        get_inputs(then_scope_symbols), then_scope_symbols, Null().const(None)
+        then_scope_context.scope.inputs, then_scope_context.scope.symbols, Null().const(None),
     )
     elseBlk = Block[Null](
-        get_inputs(else_scope_symbols), else_scope_symbols, Null().const(None)
+        else_scope_context.scope.inputs, else_scope_context.scope.symbols, Null().const(None),
     )
     return stage(
         IfThenElse[Null](condBlk, thenBlk, elseBlk),
         ctx=SrcCtx(file_name, dis.Positions(lineno=lineno, col_offset=col_offset)),
     )
-
-
-def get_inputs(
-    scope_symbols: typing.List[Exp[typing.Any, typing.Any]]
-) -> typing.List[Exp[typing.Any, typing.Any]]:
-    # We only want to consider symbols that have inputs in their rhs (i.e. Nodes)
-    # We also want to exclude Mux nodes from the list of inputs
-    scope_symbols = [
-        symbol
-        for symbol in scope_symbols
-        if symbol.is_node() and not isinstance(symbol.rhs.val.underlying, Phi)
-    ]
-
-    # We use a symbol's id instead of just the symbol objects below because symbols
-    # are not hashable and Python complains.
-    # Create a dictionary mapping IDs to symbols
-    symbol_map = {symbol.rhs.val.id: symbol for symbol in scope_symbols}  # type: ignore -- symbol.rhs.val has already been checked to be a Node
-
-    all_symbol_ids = set(symbol_map.keys())
-
-    # The list of inputs in our scope constitutes the set of all inputs of all symbols
-    # minus the set of all symbols defined in this scope
-    all_input_ids = set()
-    for symbol in scope_symbols:
-        inputs = symbol.rhs.val.underlying.inputs  # type: ignore -- symbol.rhs.val has already been checked to be a Node
-        symbol_map.update({input.rhs.val.id: input for input in inputs})  # type: ignore -- input.rhs.val has already been checked to be a Node
-        all_input_ids.update({input.rhs.val.id for input in inputs})  # type: ignore -- input.rhs.val has already been checked to be a Node
-
-    result_ids = all_input_ids - all_symbol_ids
-    return [symbol_map[result_id] for result_id in result_ids]
 
 
 def stage_function_call(
@@ -144,14 +116,16 @@ def stage_loop(
     col_offset: int,
     values: typing.List[Exp[typing.Any, typing.Any]],
     binds: typing.List[Exp[typing.Any, typing.Any]],
-    cond_scope_symbols: typing.List[Exp[typing.Any, typing.Any]],
+    cond_scope_context: ScopeContext,
     cond: Exp[typing.Any, typing.Any],
-    loop_scope_symbols: typing.List[Exp[typing.Any, typing.Any]],
+    loop_scope_context: ScopeContext,
     outputs: namedtuple,
 ) -> Ref[typing.Any, typing.Any]:
-    condBlk = Block[Boolean](get_inputs(cond_scope_symbols), cond_scope_symbols, cond)
+    condBlk = Block[Boolean](
+        cond_scope_context.scope.inputs, cond_scope_context.scope.symbols, cond
+    )
     bodyBlk = Block[Null](
-        get_inputs(loop_scope_symbols), loop_scope_symbols, Null().const(None)
+        loop_scope_context.scope.inputs, loop_scope_context.scope.symbols, Null().const(None)
     )
     return stage(
         Loop(values, binds, condBlk, bodyBlk, outputs),
@@ -672,7 +646,7 @@ except NameError:
         # Stage if call
         new_body.extend(
             ast.parse(
-                f"__________argon.argon.virtualization.virtualizer.stage_if('{self.file_name}', {node.lineno}, {node.col_offset}, {cond_scope_name}.scope.symbols, {cond_name}, {then_scope_name}.scope.symbols, {else_scope_name}.scope.symbols)"
+                f"__________argon.argon.virtualization.virtualizer.stage_if('{self.file_name}', {node.lineno}, {node.col_offset}, {cond_scope_name}, {cond_name}, {then_scope_name}, {else_scope_name})"
             ).body
         )
 
@@ -865,7 +839,7 @@ except NameError:
             # Stage the loop
             new_body.extend(
                 ast.parse(
-                    f"__________argon.argon.virtualization.virtualizer.stage_loop('{self.file_name}', {node.lineno}, {node.col_offset}, {values_name}, {binds_name}, {cond_scope_name}.scope.symbols, {cond_name}, {loop_scope_name}.scope.symbols, {loop_outputs_name})"
+                    f"__________argon.argon.virtualization.virtualizer.stage_loop('{self.file_name}', {node.lineno}, {node.col_offset}, {values_name}, {binds_name}, {cond_scope_name}, {cond_name}, {loop_scope_name}, {loop_outputs_name})"
                 ).body
             )
 
