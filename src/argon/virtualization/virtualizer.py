@@ -276,6 +276,19 @@ class Transformer(ast.NodeTransformer):
 
         return node
 
+    def visit_AugAssign(self, node):
+        # Visit RHS of assignment
+        node.value = self.visit(node.value)
+
+        if isinstance(node.target, ast.Name):
+            self.variable_tracker.add_written_var(node.target.id)
+        else:
+            raise NotImplementedError(
+                "Only support single-variable assignments for augmented assignments"
+            )
+
+        return node
+
     def _process_target(self, target):
         # Handle simple variable assignment
         if isinstance(target, ast.Name):
