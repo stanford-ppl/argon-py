@@ -159,54 +159,81 @@ def stage_loop(
     )
 
 
+class VariableTrackerWhile:
+    def __init__(self, variable_tracker: "VariableTracker"):
+        self.variable_tracker = variable_tracker
+
+    def __enter__(self):
+        self.variable_tracker.push_context()
+        self.variable_tracker.binds_stack.append(set())
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        popped_write_set, _ = self.variable_tracker.pop_context()
+        popped_binds = self.variable_tracker.binds_stack.pop()
+        for var in popped_write_set:
+            if var in popped_binds:
+                self.variable_tracker.add_read_var(var)
+            self.variable_tracker.add_written_var(var)
+
+    def add_written_var(self, var):
+        if (
+            (
+                len(self.variable_tracker.write_set_stack) > 1
+                and len(self.variable_tracker.read_set_stack) > 1
+            )
+            and (
+                var not in self.variable_tracker.current_write_set()
+                and var not in self.variable_tracker.previous_write_set()
+            )
+            and (
+                var in self.variable_tracker.current_read_set()
+                or var in self.variable_tracker.previous_read_set()
+            )
+        ):
+            self.variable_tracker.current_binds().add(var)
+
+
 class VariableTracker:
     def __init__(self):
         self.write_set_stack = [set()]
         self.read_set_stack = [set()]
         self.binds_stack = []
+        self.variable_tracker_while = VariableTrackerWhile(self)
 
     def push_context(self):
         self.write_set_stack.append(set())
         self.read_set_stack.append(set())
 
     def pop_context(self):
+        return self.write_set_stack.pop(), self.read_set_stack.pop()
+
+    def fold_context(self):
         curr_write_set = self.write_set_stack.pop()
         self.current_write_set().update(curr_write_set)
         curr_read_set = self.read_set_stack.pop()
         self.current_read_set().update(curr_read_set)
 
-    def push_binds_context(self):
-        self.binds_stack.append(set())
-
-    def pop_binds_context(self):
-        self.binds_stack.pop()
-
     def current_write_set(self):
         return self.write_set_stack[-1]
 
+    def previous_write_set(self):
+        return self.write_set_stack[-2]
+
     def current_read_set(self):
         return self.read_set_stack[-1]
+
+    def previous_read_set(self):
+        return self.read_set_stack[-2]
 
     def current_binds(self):
         return self.binds_stack[-1]
 
     def add_written_var(self, var):
-        if (
-            (len(self.write_set_stack) > 1 and len(self.read_set_stack) > 1)
-            and (
-                var not in self.write_set_stack[-1]
-                and var not in self.write_set_stack[-2]
-            )
-            and (var in self.read_set_stack[-1] or var in self.read_set_stack[-2])
-        ):
-            self.add_bind(var)
+        self.variable_tracker_while.add_written_var(var)
         self.current_write_set().add(var)
 
     def add_read_var(self, var):
         self.current_read_set().add(var)
-
-    def add_bind(self, var):
-        self.current_binds().add(var)
 
 
 class Transformer(ast.NodeTransformer):
@@ -287,7 +314,9 @@ class Transformer(ast.NodeTransformer):
         if isinstance(node.target, ast.Name):
             self.variable_tracker.add_written_var(node.target.id)
         else:
-            raise NotImplementedError("Only support single-variable assignments for walrus operators")
+            raise NotImplementedError(
+                "Only support single-variable assignments for walrus operators"
+            )
 
         return node
 
@@ -432,21 +461,21 @@ class Transformer(ast.NodeTransformer):
         node.test = self.visit(node.test)
         cond_write_set = self.variable_tracker.current_write_set()
         cond_read_set = self.variable_tracker.current_read_set()
-        self.variable_tracker.pop_context()
+        self.variable_tracker.fold_context()
 
         # Recursively visit the then body
         self.variable_tracker.push_context()
         node.body = [self.visit(stmt) for stmt in node.body]
         then_write_set = self.variable_tracker.current_write_set()
         then_read_set = self.variable_tracker.current_read_set()
-        self.variable_tracker.pop_context()
+        self.variable_tracker.fold_context()
 
         # Recursively visit the else body
         self.variable_tracker.push_context()
         node.orelse = [self.visit(stmt) for stmt in node.orelse]
         else_write_set = self.variable_tracker.current_write_set()
         else_read_set = self.variable_tracker.current_read_set()
-        self.variable_tracker.pop_context()
+        self.variable_tracker.fold_context()
 
         new_body: typing.List[ast.stmt] = []
 
@@ -699,61 +728,60 @@ except NameError:
 
         self.counter -= 1
         self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
-        self.variable_tracker.pop_context()
+        self.variable_tracker.fold_context()
 
         return node
 
     def visit_While(self, node):
-        # Increment counter to ensure unique names for this while loop
-        self.counter += 1
+        with self.variable_tracker.variable_tracker_while:
+            # Increment counter to ensure unique names for this while loop
+            self.counter += 1
 
-        # Properly set flags before recursive visits
-        prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
-        self.concrete_to_abstract_flag = self.loops
-        self.variable_tracker.push_context()
-        self.variable_tracker.push_binds_context()
+            # Properly set flags before recursive visits
+            prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
+            self.concrete_to_abstract_flag = self.loops
 
-        # Recursively visit the condition
-        self.variable_tracker.push_context()
-        node.test = self.visit(node.test)
-        cond_write_set = self.variable_tracker.current_write_set()
-        cond_read_set = self.variable_tracker.current_read_set()
-        self.variable_tracker.pop_context()
+            # Recursively visit the condition
+            self.variable_tracker.push_context()
+            node.test = self.visit(node.test)
+            cond_write_set = self.variable_tracker.current_write_set()
+            cond_read_set = self.variable_tracker.current_read_set()
+            self.variable_tracker.fold_context()
 
-        # Recursively visit the body
-        self.variable_tracker.push_context()
-        node.body = [self.visit(stmt) for stmt in node.body]
-        body_write_set = self.variable_tracker.current_write_set()
-        body_read_set = self.variable_tracker.current_read_set()
-        self.variable_tracker.pop_context()
+            # Recursively visit the body
+            self.variable_tracker.push_context()
+            node.body = [self.visit(stmt) for stmt in node.body]
+            body_write_set = self.variable_tracker.current_write_set()
+            body_read_set = self.variable_tracker.current_read_set()
+            self.variable_tracker.fold_context()
 
-        if node.orelse:
-            raise NotImplementedError("Does not support else statements for loops")
+            if node.orelse:
+                raise NotImplementedError("Does not support else statements for loops")
 
-        new_body: typing.List[ast.stmt] = []
+            new_body: typing.List[ast.stmt] = []
 
-        # Create temporary list of input values and binds
-        values_name = self.generate_temp_var("values")
-        binds_name = self.generate_temp_var("binds")
-        new_body.append(
-            ast.Assign(
-                targets=[ast.Name(id=values_name, ctx=ast.Store())],
-                value=ast.List(elts=[], ctx=ast.Load()),
+            # Create temporary list of input values and binds
+            values_name = self.generate_temp_var("values")
+            binds_name = self.generate_temp_var("binds")
+            new_body.append(
+                ast.Assign(
+                    targets=[ast.Name(id=values_name, ctx=ast.Store())],
+                    value=ast.List(elts=[], ctx=ast.Load()),
+                )
             )
-        )
-        new_body.append(
-            ast.Assign(
-                targets=[ast.Name(id=binds_name, ctx=ast.Store())],
-                value=ast.List(elts=[], ctx=ast.Load()),
+            new_body.append(
+                ast.Assign(
+                    targets=[ast.Name(id=binds_name, ctx=ast.Store())],
+                    value=ast.List(elts=[], ctx=ast.Load()),
+                )
             )
-        )
 
-        # Create binds
-        # TODO: This part needs to be changed to only create binds for inputs
-        for var in self.variable_tracker.current_binds():
-            new_body.extend(
-                ast.parse(
-                    f"""
+            # Create binds
+            # TODO: This part needs to be changed to only create binds for inputs
+            for var in self.variable_tracker.current_binds():
+                new_body.extend(
+                    ast.parse(
+                        f"""
 try:
     {values_name}.append(__________argon.argon.virtualization.type_mapper.concrete_to_abstract({var}))
     {var} = __________argon.argon.virtualization.type_mapper.concrete_to_abstract({var}).bound('{var}')
@@ -761,117 +789,119 @@ try:
 except NameError:
     pass
 """
+                    ).body
+                )
+
+            # Run the condition under a different scope
+            cond_scope_name = self.generate_temp_var("cond", "scope")
+            cond_name = self.generate_temp_var("cond")
+            new_body.extend(
+                ast.parse(
+                    f"{cond_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()"
                 ).body
             )
-
-        # Run the condition under a different scope
-        cond_scope_name = self.generate_temp_var("cond", "scope")
-        cond_name = self.generate_temp_var("cond")
-        new_body.extend(
-            ast.parse(
-                f"{cond_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()"
-            ).body
-        )
-        new_body.append(
-            ast.With(
-                items=[
-                    ast.withitem(
-                        context_expr=ast.Name(id=cond_scope_name, ctx=ast.Load())
-                    )
-                ],
-                body=[
-                    ast.Assign(
-                        targets=[ast.Name(id=cond_name, ctx=ast.Store())],
-                        value=node.test,
-                    )
-                ],
+            new_body.append(
+                ast.With(
+                    items=[
+                        ast.withitem(
+                            context_expr=ast.Name(id=cond_scope_name, ctx=ast.Load())
+                        )
+                    ],
+                    body=[
+                        ast.Assign(
+                            targets=[ast.Name(id=cond_name, ctx=ast.Store())],
+                            value=node.test,
+                        )
+                    ],
+                )
             )
-        )
 
-        # Create a new scope to run the loop body
-        loop_scope_name = self.generate_temp_var("loop", "scope")
-        new_body.extend(
-            ast.parse(
-                f"{loop_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()"
-            ).body
-        )
-        loop_outputs_name = self.generate_temp_var("loop", "outputs")
-        loop_body = node.body.copy()
-        loop_body.append(  # The loop body should be the original loop body + the following line to assign the loop outputs
-            ast.Assign(
-                targets=[ast.Name(id=loop_outputs_name, ctx=ast.Store())],
-                value=ast.Call(
-                    func=ast.Call(
-                        func=ast.Name(id="namedtuple", ctx=ast.Load()),
+            # Create a new scope to run the loop body
+            loop_scope_name = self.generate_temp_var("loop", "scope")
+            new_body.extend(
+                ast.parse(
+                    f"{loop_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()"
+                ).body
+            )
+            loop_outputs_name = self.generate_temp_var("loop", "outputs")
+            loop_body = node.body.copy()
+            loop_body.append(  # The loop body should be the original loop body + the following line to assign the loop outputs
+                ast.Assign(
+                    targets=[ast.Name(id=loop_outputs_name, ctx=ast.Store())],
+                    value=ast.Call(
+                        func=ast.Call(
+                            func=ast.Name(id="namedtuple", ctx=ast.Load()),
+                            args=[
+                                ast.Constant(value=loop_outputs_name),
+                                ast.List(
+                                    elts=[
+                                        ast.Constant(value=var)
+                                        for var in self.variable_tracker.current_write_set()
+                                    ],
+                                    ctx=ast.Load(),
+                                ),
+                            ],
+                            keywords=[],
+                        ),
                         args=[
-                            ast.Constant(value=loop_outputs_name),
-                            ast.List(
-                                elts=[
-                                    ast.Constant(value=var)
-                                    for var in self.variable_tracker.current_write_set()
-                                ],
-                                ctx=ast.Load(),
-                            ),
+                            ast.Name(id=var, ctx=ast.Load())
+                            for var in self.variable_tracker.current_write_set()
                         ],
                         keywords=[],
                     ),
-                    args=[
-                        ast.Name(id=var, ctx=ast.Load())
-                        for var in self.variable_tracker.current_write_set()
+                )
+            )
+            new_body.append(
+                ast.With(
+                    items=[
+                        ast.withitem(
+                            context_expr=ast.Name(id=loop_scope_name, ctx=ast.Load())
+                        )
                     ],
-                    keywords=[],
-                ),
+                    body=loop_body,
+                )
             )
-        )
-        new_body.append(
-            ast.With(
-                items=[
-                    ast.withitem(
-                        context_expr=ast.Name(id=loop_scope_name, ctx=ast.Load())
-                    )
-                ],
-                body=loop_body,
+
+            # Stage the loop
+            new_body.extend(
+                ast.parse(
+                    f"__________argon.argon.virtualization.virtualizer.stage_loop('{self.file_name}', {node.lineno}, {node.col_offset}, {values_name}, {binds_name}, {cond_scope_name}.scope.symbols, {cond_name}, {loop_scope_name}.scope.symbols, {loop_outputs_name})"
+                ).body
             )
-        )
 
-        # Stage the loop
-        new_body.extend(
-            ast.parse(
-                f"__________argon.argon.virtualization.virtualizer.stage_loop('{self.file_name}', {node.lineno}, {node.col_offset}, {values_name}, {binds_name}, {cond_scope_name}.scope.symbols, {cond_name}, {loop_scope_name}.scope.symbols, {loop_outputs_name})"
-            ).body
-        )
+            # Delete all temporary variables
+            # TODO: COMPLETE THIS PART
+            new_body.append(
+                ast.Delete(targets=[ast.Name(id=values_name, ctx=ast.Del())])
+            )
+            new_body.append(
+                ast.Delete(targets=[ast.Name(id=binds_name, ctx=ast.Del())])
+            )
+            new_body.append(
+                ast.Delete(targets=[ast.Name(id=cond_scope_name, ctx=ast.Del())])
+            )
+            new_body.append(ast.Delete(targets=[ast.Name(id=cond_name, ctx=ast.Del())]))
+            new_body.append(
+                ast.Delete(targets=[ast.Name(id=loop_scope_name, ctx=ast.Del())])
+            )
+            new_body.append(
+                ast.Delete(targets=[ast.Name(id=loop_outputs_name, ctx=ast.Del())])
+            )
 
-        # Delete all temporary variables
-        # TODO: COMPLETE THIS PART
-        new_body.append(ast.Delete(targets=[ast.Name(id=values_name, ctx=ast.Del())]))
-        new_body.append(ast.Delete(targets=[ast.Name(id=binds_name, ctx=ast.Del())]))
-        new_body.append(
-            ast.Delete(targets=[ast.Name(id=cond_scope_name, ctx=ast.Del())])
-        )
-        new_body.append(ast.Delete(targets=[ast.Name(id=cond_name, ctx=ast.Del())]))
-        new_body.append(
-            ast.Delete(targets=[ast.Name(id=loop_scope_name, ctx=ast.Del())])
-        )
-        new_body.append(
-            ast.Delete(targets=[ast.Name(id=loop_outputs_name, ctx=ast.Del())])
-        )
+            new_body.append(ast.Break())
 
-        new_body.append(ast.Break())
+            # Do not stage the while loop if the flag is set to False
+            # TODO: error handling if condition is Argon type
+            if self.loops:
+                # Replace the original while body with the new wrapped body
+                node.body = new_body
 
-        # Do not stage the while loop if the flag is set to False
-        # TODO: error handling if condition is Argon type
-        if self.loops:
-            # Replace the original while body with the new wrapped body
-            node.body = new_body
+                # Set the condition to True and add a break statement at the end of the body
+                # This lets us run the body just once
+                node.test = ast.Constant(value=True)
 
-            # Set the condition to True and add a break statement at the end of the body
-            # This lets us run the body just once
-            node.test = ast.Constant(value=True)
-
-        self.counter -= 1
-        self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
-        self.variable_tracker.pop_context()
-        self.variable_tracker.pop_binds_context()
+            self.counter -= 1
+            self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
 
         return node
 
