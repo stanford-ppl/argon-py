@@ -1,46 +1,10 @@
 import ast
 
 
-class VariableTrackerWhile:
-    def __init__(self, variable_tracker: "VariableTracker"):
-        self.variable_tracker = variable_tracker
-
-    def __enter__(self):
-        self.variable_tracker.push_context()
-        self.variable_tracker.binds_stack.append(set())
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        popped_write_set, _ = self.variable_tracker.pop_context()
-        popped_binds = self.variable_tracker.binds_stack.pop()
-        for var in popped_write_set:
-            if var in popped_binds:
-                self.variable_tracker.add_read_var(var)
-            self.variable_tracker.add_written_var(var)
-
-    def add_written_var(self, var):
-        if (
-            (
-                len(self.variable_tracker.write_set_stack) > 1
-                and len(self.variable_tracker.read_set_stack) > 1
-            )
-            and (
-                var not in self.variable_tracker.current_write_set()
-                and var not in self.variable_tracker.previous_write_set()
-            )
-            and (
-                var in self.variable_tracker.current_read_set()
-                or var in self.variable_tracker.previous_read_set()
-            )
-        ):
-            self.variable_tracker.current_binds().add(var)
-
-
 class VariableTracker:
     def __init__(self):
         self.write_set_stack = [set()]
         self.read_set_stack = [set()]
-        self.binds_stack = []
-        self.variable_tracker_while = VariableTrackerWhile(self)
 
     def push_context(self):
         self.write_set_stack.append(set())
@@ -50,10 +14,10 @@ class VariableTracker:
         return self.write_set_stack.pop(), self.read_set_stack.pop()
 
     def fold_context(self):
-        curr_write_set = self.write_set_stack.pop()
-        self.current_write_set().update(curr_write_set)
         curr_read_set = self.read_set_stack.pop()
-        self.current_read_set().update(curr_read_set)
+        curr_write_set = self.write_set_stack.pop()
+        self.current_read_set().update(curr_read_set - self.current_write_set())
+        self.current_write_set().update(curr_write_set)
 
     def current_write_set(self):
         return self.write_set_stack[-1]
@@ -67,11 +31,7 @@ class VariableTracker:
     def previous_read_set(self):
         return self.read_set_stack[-2]
 
-    def current_binds(self):
-        return self.binds_stack[-1]
-
     def add_written_var(self, var):
-        self.variable_tracker_while.add_written_var(var)
         self.current_write_set().add(var)
 
     def add_read_var(self, var):
@@ -116,6 +76,12 @@ class TransformerBase(ast.NodeTransformer):
             args=[node],
             keywords=[],
         )
+    
+    def visit(self, node):
+        self.variable_tracker.push_context()
+        node = super().visit(node)
+        self.variable_tracker.fold_context()
+        return node
 
     def visit_Constant(self, node):
         if self.concrete_to_abstract_flag:
