@@ -1,5 +1,4 @@
 from argon.state import State
-from argon.types.integer import Integer
 from argon.virtualization.wrapper import argon_function
 from collections import namedtuple
 
@@ -30,7 +29,7 @@ def my_func(x, y):
     return x + y
 
 
-@argon_function(calls=True, if_exps=False)
+@argon_function(if_exps=False)
 def ifs():
     a = True
     b = False
@@ -66,19 +65,16 @@ def test_ifs():
     print(state)
 
 
-@argon_function(loops=True)
+@argon_function()
 def loops():
-    a = 0
-    b = 1
-    c = 2 if True else 3
-    while a < 10:
-        a = 1
-        a = a + 1
-        a = a + 2
-        b = b + 2
-        d = c + 1
-        e = 1
-        f = e + 1
+    a = 1
+    b = 2
+    c = 3
+    while a < 100:
+        a = b + 10
+        b = a + 20
+        d = c + 30
+        e = d + 40
 
 
 def test_loops():
