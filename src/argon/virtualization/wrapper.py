@@ -5,7 +5,9 @@ import typing
 
 from argon.types.function import FunctionWithVirt
 from argon.virtualization.func import ArgonFunction
-from argon.virtualization.virtualizer import Transformer
+from argon.virtualization.virtualizer.virtualizer_top import (
+    TransformerTop as Transformer,
+)
 
 
 # TODO: After implementing more transformations, add relevant flags to the decorator to enable/disable them
