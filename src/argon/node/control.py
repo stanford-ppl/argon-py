@@ -46,7 +46,7 @@ class IfThenElse[T](Op[T]):
 
 
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
-class Loop(Op[Null]):
+class Loop[T](Op[T]):
     """
     The Loop operation represents both for and while loop control flow constructs.
 

@@ -10,6 +10,7 @@ from argon.srcctx import SrcCtx
 from argon.state import ScopeContext, stage
 from argon.types.boolean import Boolean
 from argon.types.null import Null
+from argon.types.dictionary import Dictionary
 from argon.virtualization.virtualizer.virtualizer_base import TransformerBase
 
 
@@ -32,8 +33,9 @@ def stage_loop(
         loop_scope_context.scope.symbols,
         Null().const(None),
     )
+    output_types = {field: getattr(outputs, field).A for field in outputs._fields}
     return stage(
-        Loop(values, binds, condBlk, bodyBlk, outputs),
+        Loop[Dictionary[output_types]](values, binds, condBlk, bodyBlk, outputs),
         ctx=SrcCtx(file_name, dis.Positions(lineno=lineno, col_offset=col_offset)),
     )
 
@@ -90,7 +92,10 @@ class TransformerLoop(TransformerBase):
 
         # Create binds
         # TODO: This part needs to be changed to only create binds for inputs
-        for var in (self.variable_tracker.current_write_set() & self.variable_tracker.current_read_set()):
+        for var in (
+            self.variable_tracker.current_write_set()
+            & self.variable_tracker.current_read_set()
+        ):
             new_body.extend(
                 ast.parse(
                     f"""
@@ -135,9 +140,19 @@ except NameError:
                 f"{loop_scope_name} = __________argon.argon.state.State.get_current_state().new_scope()"
             ).body
         )
+        new_body.append(
+            ast.With(
+                items=[
+                    ast.withitem(
+                        context_expr=ast.Name(id=loop_scope_name, ctx=ast.Load())
+                    )
+                ],
+                body=node.body.copy(),
+            )
+        )
+
         loop_outputs_name = self.generate_temp_var("loop", "outputs")
-        loop_body = node.body.copy()
-        loop_body.append(  # The loop body should be the original loop body + the following line to assign the loop outputs
+        new_body.append(  # The loop body should be the original loop body + the following line to assign the loop outputs
             ast.Assign(
                 targets=[ast.Name(id=loop_outputs_name, ctx=ast.Store())],
                 value=ast.Call(
@@ -163,32 +178,22 @@ except NameError:
                 ),
             )
         )
-        new_body.append(
-            ast.With(
-                items=[
-                    ast.withitem(
-                        context_expr=ast.Name(id=loop_scope_name, ctx=ast.Load())
-                    )
-                ],
-                body=loop_body,
-            )
-        )
 
         # Stage the loop
         new_body.extend(
             ast.parse(
-                f"__________argon.argon.virtualization.virtualizer.virtualizer_loop.stage_loop('{self.file_name}', {node.lineno}, {node.col_offset}, {values_name}, {binds_name}, {cond_scope_name}, {cond_name}, {loop_scope_name}, {loop_outputs_name})"
+                f"{loop_outputs_name} = __________argon.argon.virtualization.virtualizer.virtualizer_loop.stage_loop('{self.file_name}', {node.lineno}, {node.col_offset}, {values_name}, {binds_name}, {cond_scope_name}, {cond_name}, {loop_scope_name}, {loop_outputs_name})"
             ).body
         )
 
+        # Assign the loop outputs
+        for var in self.variable_tracker.current_write_set():
+            new_body.extend(ast.parse(f"{var} = {loop_outputs_name}['{var}']").body)
+
         # Delete all temporary variables
         # TODO: COMPLETE THIS PART
-        new_body.append(
-            ast.Delete(targets=[ast.Name(id=values_name, ctx=ast.Del())])
-        )
-        new_body.append(
-            ast.Delete(targets=[ast.Name(id=binds_name, ctx=ast.Del())])
-        )
+        new_body.append(ast.Delete(targets=[ast.Name(id=values_name, ctx=ast.Del())]))
+        new_body.append(ast.Delete(targets=[ast.Name(id=binds_name, ctx=ast.Del())]))
         new_body.append(
             ast.Delete(targets=[ast.Name(id=cond_scope_name, ctx=ast.Del())])
         )
