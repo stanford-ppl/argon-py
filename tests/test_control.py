@@ -75,6 +75,7 @@ def loops():
         b = a + 20
         d = c + 30
         e = d + 40
+        f = e < 200
 
 
 def test_loops():
