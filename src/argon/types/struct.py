@@ -1,6 +1,5 @@
 from typing import override
 import typing
-from argon.node.dict_ops import Get
 from argon.ref import Ref
 from argon.srcctx import SrcCtx
 from argon.state import stage
@@ -9,16 +8,16 @@ from argon.state import stage
 T = typing.TypeVar("T")
 
 
-class Dictionary[T](Ref[dict, "Dictionary[T]"]):
+class Struct[T](Ref[dict, "Struct[T]"]):
     """
-    The NamedTuple[T] class represents a namedtuple in the Argon
+    The Struct[T] class represents a namedtuple in the Argon
     language. The type parameter T is a namedtuple with keys
     mapping to the types of the values in the NamedTuple.
     """
 
     @override
-    def fresh(self) -> "Dictionary[T]":
-        return Dictionary[self.T]()
+    def fresh(self) -> "Struct[T]":
+        return Struct[self.T]()
 
     # TODO: Only restricting keys to str for now
     def __getitem__(self, key: str) -> T:
@@ -26,4 +25,6 @@ class Dictionary[T](Ref[dict, "Dictionary[T]"]):
             item_tp = self.T[key]
         except KeyError:
             raise KeyError(f"Key '{key}' not found in dictionary {self}")
+
+        from argon.node.struct_ops import Get
         return stage(Get[item_tp](self, key), ctx=SrcCtx.new(2))

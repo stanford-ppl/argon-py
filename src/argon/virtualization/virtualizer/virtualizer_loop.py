@@ -10,7 +10,7 @@ from argon.srcctx import SrcCtx
 from argon.state import ScopeContext, stage
 from argon.types.boolean import Boolean
 from argon.types.null import Null
-from argon.types.dictionary import Dictionary
+from argon.types.struct import Struct
 from argon.virtualization.virtualizer.virtualizer_base import TransformerBase
 
 
@@ -35,7 +35,7 @@ def stage_loop(
     )
     output_types = {field: getattr(outputs, field).A for field in outputs._fields}
     return stage(
-        Loop[Dictionary[output_types]](values, binds, condBlk, bodyBlk, outputs),
+        Loop[Struct[output_types]](values, binds, condBlk, bodyBlk, outputs),
         ctx=SrcCtx(file_name, dis.Positions(lineno=lineno, col_offset=col_offset)),
     )
 
@@ -188,10 +188,14 @@ except NameError:
 
         # Assign the loop outputs
         for var in self.variable_tracker.current_write_set():
-            new_body.extend(ast.parse(f"{var} = {loop_outputs_name}['{var}']").body)
+            new_stmt = ast.parse(f"{var} = {loop_outputs_name}['{var}']").body[0]
+            # Copy location information so that the staged result has the correct SrcCtx
+            ast.copy_location(new_stmt, node)
+            for subnode in ast.walk(new_stmt):
+                ast.copy_location(subnode, node)
+            new_body.append(new_stmt)
 
         # Delete all temporary variables
-        # TODO: COMPLETE THIS PART
         new_body.append(ast.Delete(targets=[ast.Name(id=values_name, ctx=ast.Del())]))
         new_body.append(ast.Delete(targets=[ast.Name(id=binds_name, ctx=ast.Del())]))
         new_body.append(
