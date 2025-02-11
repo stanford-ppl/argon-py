@@ -22,7 +22,7 @@ def stage_function_call(
     abstract_args = [concrete_to_abstract(arg) for arg in args]
     abstract_func = concrete_to_abstract.function(func, abstract_args)
     return stage(
-        FunctionCall[abstract_func.F](abstract_func, abstract_args), ctx=SrcCtx.new(2)
+        FunctionCall[abstract_func.RETURN_TP](abstract_func, abstract_args), ctx=SrcCtx.new(2)
     )
 
 

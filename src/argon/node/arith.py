@@ -47,7 +47,7 @@ class Sub[T](Op[T]):
     @property
     @typing.override
     def operands(self) -> typing.List[Sym[typing.Any]]:
-        return [self.a, self.b]
+        return [self.a, self.b]  # type: ignore
 
 
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
@@ -67,7 +67,7 @@ class GreaterThan[T](Op[Boolean]):
     @property
     @typing.override
     def operands(self) -> typing.List[Sym[typing.Any]]:
-        return [self.a, self.b]
+        return [self.a, self.b]  # type: ignore
 
 
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
@@ -87,4 +87,4 @@ class LessThan[T](Op[Boolean]):
     @property
     @typing.override
     def operands(self) -> typing.List[Sym[typing.Any]]:
-        return [self.a, self.b]
+        return [self.a, self.b]  # type: ignore

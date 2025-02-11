@@ -16,21 +16,21 @@ class FunctionWithVirt(Protocol):
     virtualized: ArgonFunction
 
 
-F = typing.TypeVar("F")
+RETURN_TP = typing.TypeVar("RETURN_TP")
 
 
-class Function[F](Ref[FunctionWithVirt, "Function[F]"]):
+class Function[RETURN_TP](Ref[FunctionWithVirt, "Function[RETURN_TP]"]):
     """
     The Function class represents a function in the Argon language.
     """
 
     @override
-    def fresh(self) -> "Function[F]":  # type: ignore -- Pyright falsely detects F as an abstractproperty instead of type variable
-        return Function[self.F]()
+    def fresh(self) -> "Function[RETURN_TP]":  # type: ignore -- Pyright falsely detects F as an abstractproperty instead of type variable
+        return Function[self.RETURN_TP]()
 
-    # F shim is used to silence typing errors -- its actual definition is provided by ArgonMeta
+    # RETURN_TP shim is used to silence typing errors -- its actual definition is provided by ArgonMeta
     @abc.abstractproperty
-    def F(self) -> typing.Type[F]:
+    def RETURN_TP(self) -> typing.Type[RETURN_TP]:
         raise NotImplementedError()
 
 

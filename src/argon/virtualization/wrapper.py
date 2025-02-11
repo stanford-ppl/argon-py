@@ -45,6 +45,7 @@ def argon_function(calls=True, ifs=True, if_exps=True, loops=True):
 
         # Remove the decorators from the AST, because the modified function will
         # be passed to them anyway and we don't want them to be called twice.
+        func_src = None
         for node in parsed.body:
             if isinstance(node, ast.FunctionDef) and node.name == func.__name__:
                 node.decorator_list = [
@@ -64,6 +65,9 @@ def argon_function(calls=True, ifs=True, if_exps=True, loops=True):
                 )
                 func_src = node
                 break
+
+        if func_src is None:
+            raise ValueError(f"Unable to virtualize {func.__name__} in file {src}")
 
         # Apply the AST transformation
         # TODO: Add the transformation flags here too!

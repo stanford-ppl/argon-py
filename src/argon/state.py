@@ -108,7 +108,7 @@ class Scope:
         node_symbols = [
             symbol
             for symbol in self.symbols
-            if symbol.is_node() and not isinstance(symbol.rhs.val.underlying, Phi)
+            if symbol.is_node() and not isinstance(symbol.rhs.val.underlying, Phi)  # type: ignore -- symbol.rhs.val has already been checked to be a Node
         ]
 
         # We use a symbol's id instead of just the symbol objects below because symbols

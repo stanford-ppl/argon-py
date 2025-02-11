@@ -30,5 +30,5 @@ def test_c_to_a():
 
         d = func
         d1 = concrete_to_abstract.function(d, [concrete_to_abstract(3)])
-        assert d1.F is Integer
+        assert d1.RETURN_TP is Integer
     print(state)

@@ -17,4 +17,4 @@ class Get[T](Op[T]):
     @property
     @typing.override
     def operands(self) -> typing.List[Exp[typing.Any, typing.Any]]:
-        return [self.struct, self.key]
+        return [self.struct]
