@@ -99,12 +99,9 @@ class TransformerLoop(TransformerBase):
             new_body.extend(
                 ast.parse(
                     f"""
-try:
-    {values_name}.append(__________argon.argon.virtualization.type_mapper.concrete_to_abstract({var}))
-    {var} = __________argon.argon.virtualization.type_mapper.concrete_to_abstract({var}).bound('{var}')
-    {binds_name}.append({var})
-except NameError:
-    pass
+{values_name}.append(__________argon.argon.virtualization.type_mapper.concrete_to_abstract({var}))
+{var} = __________argon.argon.virtualization.type_mapper.concrete_to_abstract({var}).bound('{var}')
+{binds_name}.append({var})
 """
                 ).body
             )
