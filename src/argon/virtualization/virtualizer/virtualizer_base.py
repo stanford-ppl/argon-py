@@ -14,8 +14,7 @@ class VariableTracker:
         return self.write_set_stack.pop(), self.read_set_stack.pop()
 
     def fold_context(self):
-        curr_read_set = self.read_set_stack.pop()
-        curr_write_set = self.write_set_stack.pop()
+        curr_write_set, curr_read_set = self.pop_context()
         self.current_read_set().update(curr_read_set - self.current_write_set())
         self.current_write_set().update(curr_write_set)
 
