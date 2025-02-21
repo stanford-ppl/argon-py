@@ -5,7 +5,7 @@ from argon.srcctx import SrcCtx
 from argon.state import stage
 
 import argon.node.logical as logical
-from argon.virtualization.type_mapper import concrete_to_abstract
+from argon.virtualization.type_mapper import concrete_to_abstract, concrete_to_bound
 
 
 class Boolean(Ref[bool, "Boolean"]):
@@ -43,3 +43,4 @@ class Boolean(Ref[bool, "Boolean"]):
 
 
 concrete_to_abstract[bool] = lambda x: Boolean().const(x)
+concrete_to_bound[bool] = lambda name: Boolean().bound(name)

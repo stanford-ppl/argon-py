@@ -5,7 +5,7 @@ from argon.ref import Ref
 from argon.srcctx import SrcCtx
 from argon.state import stage
 from argon.types.boolean import Boolean
-from argon.virtualization.type_mapper import concrete_to_abstract
+from argon.virtualization.type_mapper import concrete_to_abstract, concrete_to_bound
 
 
 class Integer(Ref[int, "Integer"]):
@@ -49,3 +49,4 @@ class Integer(Ref[int, "Integer"]):
 
 
 concrete_to_abstract[int] = lambda x: Integer().const(x)
+concrete_to_bound[int] = lambda name: Integer().bound(name)
