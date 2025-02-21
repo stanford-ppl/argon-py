@@ -18,3 +18,7 @@ class Get[T](Op[T]):
     @typing.override
     def operands(self) -> typing.List[Exp[typing.Any, typing.Any]]:
         return [self.struct]
+    
+    @typing.override
+    def dump(self, indent_level=0) -> str:
+        return f"Get({self.struct}, '{self.key}')"
