@@ -3,7 +3,7 @@ import pydantic
 from pydantic.dataclasses import dataclass
 
 from argon.op import Op
-from argon.ref import Exp, Ref
+from argon.ref import Exp
 from argon.types.function import Function
 
 
@@ -14,16 +14,16 @@ class FunctionCall[T](Op[T]):
 
         func : Function[T]
             The function to call.
-        args : List[Ref[Any]]
+        args : List[Exp[Any]]
             The arguments to pass to the function.
     """
 
     func: Function[T]
-    args: typing.List[Ref[typing.Any, typing.Any]]
+    args: typing.List[Exp[typing.Any, typing.Any]]
 
     @property
     @typing.override
-    def inputs(self) -> typing.List[Exp[typing.Any, typing.Any]]:
+    def operands(self) -> typing.List[Exp[typing.Any, typing.Any]]:
         # TODO: figure out what inputs I should use
         return self.args
 

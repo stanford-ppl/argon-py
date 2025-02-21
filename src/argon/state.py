@@ -101,6 +101,34 @@ class Scope:
         pydantic.Field(default_factory=dict)
     )
 
+    @property
+    def inputs(self) -> typing.List[Exp[typing.Any, typing.Any]]:
+        # We only want to consider symbols that have inputs in their rhs (i.e. Nodes)
+        # We also want to exclude Phi nodes from the list of inputs
+        node_symbols = [
+            symbol
+            for symbol in self.symbols
+            if symbol.is_node() and not isinstance(symbol.rhs.val.underlying, Phi)  # type: ignore -- symbol.rhs.val has already been checked to be a Node
+        ]
+
+        # We use a symbol's id instead of just the symbol objects below because symbols
+        # are not hashable and Python complains.
+        # Create a dictionary mapping IDs to symbols
+        symbol_map = {symbol.rhs.val.id: symbol for symbol in node_symbols}  # type: ignore -- symbol.rhs.val has already been checked to be a Node
+
+        all_symbol_ids = set(symbol_map.keys())
+
+        # The list of inputs in our scope constitutes the set of all inputs of all symbols
+        # minus the set of all symbols defined in this scope
+        all_input_ids = set()
+        for symbol in node_symbols:
+            inputs = symbol.rhs.val.underlying.inputs  # type: ignore -- symbol.rhs.val has already been checked to be a Node
+            symbol_map.update({input.rhs.val.id: input for input in inputs})  # type: ignore -- input.rhs.val has already been checked to be a Node
+            all_input_ids.update({input.rhs.val.id for input in inputs})  # type: ignore -- input.rhs.val has already been checked to be a Node
+
+        result_ids = all_input_ids - all_symbol_ids
+        return [symbol_map[result_id] for result_id in result_ids]
+
     def dump(self, indent_level=0) -> str:
         no_indent = "|   " * indent_level
         indent = "|   " * (indent_level + 1)
@@ -145,3 +173,5 @@ def stage[A](op: Op[A], ctx: SrcCtx | None = None) -> A:
     state = State.get_current_state()
     ctx = ctx or SrcCtx.new(2)
     return state.stage(op, ctx)
+
+from argon.node.phi import Phi

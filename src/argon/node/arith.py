@@ -2,8 +2,9 @@ import typing
 import pydantic
 from argon.ref import Exp, Op, Sym
 
-# from argon.types.integer import Integer
 from pydantic.dataclasses import dataclass
+
+from argon.types.boolean import Boolean
 
 
 T = typing.TypeVar("T", bound=Exp[typing.Any, typing.Any], covariant=True)
@@ -25,5 +26,65 @@ class Add[T](Op[T]):
 
     @property
     @typing.override
-    def inputs(self) -> typing.List[Sym[typing.Any]]:
+    def operands(self) -> typing.List[Sym[typing.Any]]:
+        return [self.a, self.b]  # type: ignore
+
+
+@dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
+class Sub[T](Op[T]):
+    """
+    The Sub[T] operation represents a subtraction operation.
+
+        a : T
+            The value to subtract from.
+        b : T
+            The value to subtract.
+    """
+
+    a: T
+    b: T
+
+    @property
+    @typing.override
+    def operands(self) -> typing.List[Sym[typing.Any]]:
+        return [self.a, self.b]  # type: ignore
+
+
+@dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
+class GreaterThan[T](Op[Boolean]):
+    """
+    The GreaterThan[T] operation represents a greater than comparison.
+
+        a : T
+            The first value to compare.
+        b : T
+            The second value to compare.
+    """
+
+    a: T
+    b: T
+
+    @property
+    @typing.override
+    def operands(self) -> typing.List[Sym[typing.Any]]:
+        return [self.a, self.b]  # type: ignore
+
+
+@dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))
+class LessThan[T](Op[Boolean]):
+    """
+    The LessThan[T] operation represents a less than comparison.
+
+        a : T
+            The first value to compare.
+        b : T
+            The second value to compare.
+    """
+
+    a: T
+    b: T
+
+    @property
+    @typing.override
+    def operands(self) -> typing.List[Sym[typing.Any]]:
         return [self.a, self.b]  # type: ignore

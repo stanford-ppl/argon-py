@@ -1,17 +1,19 @@
 from argon.state import State
 from argon.virtualization.wrapper import argon_function
+from collections import namedtuple
 
 
 @argon_function(calls=False, ifs=False)
 def if_exps():
     a = True
     b = False
-    c = 3
-    d = 6
-    e = 9
-    f = 12
-    g = c + d if a & b else e + f
-    h = g + g if a | b else 15
+    c = True
+    d = 3
+    e = 6
+    f = 9
+    g = 12
+    h = d + e if a & b & c else f + g
+    i = h + h if a | b | c else 15
 
 
 def test_if_exps():
@@ -27,34 +29,31 @@ def my_func(x, y):
     return x + y
 
 
-@argon_function(calls=True, if_exps=False)
+@argon_function(if_exps=False)
 def ifs():
     a = True
     b = False
-    c = 3
-    d = 6
-    e = 9
-    f = 12
-    g = 15
-    h = 18
-    i = 21
-    j = 24
-    k = 27
-    l = 30
+    c = True
+    d = 3
+    e = 6
+    f = 9
+    g = 12
+    h = 15
+    i = 18
+    j = 21
+    k = 24
 
-    if a & b:
-        m = my_func(c, d)
-        l = 35 if a | b else 33
-    else:
-        m = e + f
+    if a & b & c:
+        l = my_func(d, e)
+        k = 35 if a | b | c else 33
 
-    if a | b:
-        m = g + h
+    if a | b | c:
+        l = f + g
     else:
-        if a ^ b:
-            m = i + j
+        if a ^ b ^ c:
+            l = h + i
         else:
-            m = k + l
+            l = j + k
 
 
 def test_ifs():
@@ -63,4 +62,26 @@ def test_ifs():
         ifs.virtualized.call_transformed()
 
     print(f"\ntest_ifs")
+    print(state)
+
+
+@argon_function()
+def loops():
+    a = 1
+    b = 2
+    c = 3
+    while a < 100:
+        a = b + 10
+        b = a + 20
+        d = c + 30
+        e = d + 40
+        f = e < 200
+
+
+def test_loops():
+    state = State()
+    with state:
+        loops.virtualized.call_transformed()
+
+    print(f"\ntest_loops")
     print(state)

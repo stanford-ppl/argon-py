@@ -5,11 +5,13 @@ import typing
 
 from argon.types.function import FunctionWithVirt
 from argon.virtualization.func import ArgonFunction
-from argon.virtualization.virtualizer import Transformer
+from argon.virtualization.virtualizer.virtualizer_top import (
+    TransformerTop as Transformer,
+)
 
 
 # TODO: After implementing more transformations, add relevant flags to the decorator to enable/disable them
-def argon_function(calls=True, ifs=True, if_exps=True):
+def argon_function(calls=True, ifs=True, if_exps=True, loops=True):
     """
     This decorator is used to virtualize a function. It takes three optional arguments that are by default all set to True:
 
@@ -19,6 +21,8 @@ def argon_function(calls=True, ifs=True, if_exps=True):
             Determines whether if statements will be virtualized.
         if_exps: bool
             Determines whether if expressions will be virtualized.
+        loops: bool
+            Determines whether loops will be virtualized.
 
     Examples:
 
@@ -41,6 +45,7 @@ def argon_function(calls=True, ifs=True, if_exps=True):
 
         # Remove the decorators from the AST, because the modified function will
         # be passed to them anyway and we don't want them to be called twice.
+        func_src = None
         for node in parsed.body:
             if isinstance(node, ast.FunctionDef) and node.name == func.__name__:
                 node.decorator_list = [
@@ -61,9 +66,12 @@ def argon_function(calls=True, ifs=True, if_exps=True):
                 func_src = node
                 break
 
+        if func_src is None:
+            raise ValueError(f"Unable to virtualize {func.__name__} in file {src}")
+
         # Apply the AST transformation
         # TODO: Add the transformation flags here too!
-        transformed = Transformer(src, calls, ifs, if_exps).visit(func_src)
+        transformed = Transformer(src, calls, ifs, if_exps, loops).visit(func_src)
         transformed = ast.fix_missing_locations(transformed)
 
         # Create a new AST containing only the transformed function

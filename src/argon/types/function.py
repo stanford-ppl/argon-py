@@ -16,21 +16,21 @@ class FunctionWithVirt(Protocol):
     virtualized: ArgonFunction
 
 
-F = typing.TypeVar("F")
+RETURN_TP = typing.TypeVar("RETURN_TP")
 
 
-class Function[F](Ref[FunctionWithVirt, "Function[F]"]):
+class Function[RETURN_TP](Ref[FunctionWithVirt, "Function[RETURN_TP]"]):
     """
     The Function class represents a function in the Argon language.
     """
 
     @override
-    def fresh(self) -> "Function[F]":  # type: ignore -- Pyright falsely detects F as an abstractproperty instead of type variable
-        return Function[self.F]()
+    def fresh(self) -> "Function[RETURN_TP]":  # type: ignore -- Pyright falsely detects F as an abstractproperty instead of type variable
+        return Function[self.RETURN_TP]()
 
-    # F shim is used to silence typing errors -- its actual definition is provided by ArgonMeta
+    # RETURN_TP shim is used to silence typing errors -- its actual definition is provided by ArgonMeta
     @abc.abstractproperty
-    def F(self) -> typing.Type[F]:
+    def RETURN_TP(self) -> typing.Type[RETURN_TP]:
         raise NotImplementedError()
 
 
@@ -47,17 +47,15 @@ def function_C_to_A(
     # get the return type of a function by actually calling it
     # TODO: add some check to see if we've already run it with args of the same type
     param_names = c_with_virt.virtualized.get_param_names()
-    scope = State.get_current_state().new_scope()
-    with scope:
+    scope_context = State.get_current_state().new_scope()
+    with scope_context:
         bound_args = [arg.bound(name) for arg, name in zip(args, param_names)]
         ret = c_with_virt.virtualized.call_transformed(*bound_args)
         ret = concrete_to_abstract(ret)
 
     name = c_with_virt.virtualized.get_function_name()
 
-    from argon.virtualization.virtualizer import get_inputs
-
-    body = Block[ret.A](get_inputs(scope.scope.symbols), scope.scope.symbols, ret)
+    body = Block[ret.A](scope_context.scope.inputs, scope_context.scope.symbols, ret)
 
     from argon.node.function_new import FunctionNew
 
