@@ -9,6 +9,8 @@ import argon
 class ArgonFunction:
     original_func: typing.Callable
     transformed_func: typing.Callable
+    return_type: typing.Type
+    param_types: typing.Dict[str, typing.Type]
 
     @property
     def argon(self):

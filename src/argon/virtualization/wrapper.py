@@ -35,6 +35,18 @@ def argon_function(calls=True, ifs=True, if_exps=True, loops=True):
         # TODO: fix ctx, when this decorator is used in test_scopes.py,
         # the ctx no longer points to the correct row number + col offset
 
+        # Get type hints of the function
+        type_hints = typing.get_type_hints(func)
+        if "return" not in type_hints:
+            raise TypeError(f"Function {func.__name__} must have a return type annotation")
+        for param_name, param in inspect.signature(func).parameters.items():
+            if param.annotation == inspect.Parameter.empty:
+                raise TypeError(
+                    f"Parameter {param_name} of function {func.__name__} must have a type annotation"
+                )
+        return_type = type_hints.pop("return")
+        param_types = type_hints
+
         # Get the source code of the file where the function is defined
         src = inspect.getfile(func)
         # Read the entire file's source
@@ -87,7 +99,7 @@ def argon_function(calls=True, ifs=True, if_exps=True, loops=True):
 
         # Replace the original function with the transformed version
         virtualized_func = ArgonFunction(
-            func, functools.update_wrapper(func_globals[func.__name__], func)
+            func, functools.update_wrapper(func_globals[func.__name__], func), return_type, param_types
         )
 
         # Create a wrapper function that calls the transformed function
