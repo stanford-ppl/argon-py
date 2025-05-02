@@ -1,14 +1,18 @@
 import abc
+from collections.abc import Callable
 import dis
 import types
-from typing import override, Protocol
+from typing import get_args, override, Protocol
 import typing
 from argon.block import Block
 from argon.ref import Ref
 from argon.srcctx import SrcCtx
 from argon.state import State, stage
+from argon.types.boolean import Boolean
+from argon.types.integer import Integer
+from argon.types.null import Null
 from argon.virtualization.func import ArgonFunction
-from argon.virtualization.type_mapper import concrete_to_abstract
+from argon.virtualization.type_mapper import concrete_to_abstract, concrete_to_bound
 
 
 @typing.runtime_checkable
@@ -34,9 +38,7 @@ class Function[RETURN_TP](Ref[FunctionWithVirt, "Function[RETURN_TP]"]):
         raise NotImplementedError()
 
 
-def function_C_to_A(
-    c: types.FunctionType, args: typing.List[Ref[typing.Any, typing.Any]]
-) -> Function:
+def function_C_to_A(c: types.FunctionType) -> Function:
     if not (hasattr(c, "virtualized") and isinstance(c.virtualized, ArgonFunction)):  # type: ignore -- Pyright complains about accessing virtualized
         from argon.virtualization.wrapper import argon_function
 
@@ -49,9 +51,19 @@ def function_C_to_A(
     param_names = c_with_virt.virtualized.get_param_names()
     scope_context = State.get_current_state().new_scope()
     with scope_context:
-        bound_args = [arg.bound(name) for arg, name in zip(args, param_names)]
+        def create_bound_arg(param_name: str) -> Ref[typing.Any, typing.Any]:
+            param_type = c_with_virt.virtualized.get_param_type(param_name)
+            if typing.get_origin(param_type) is Callable:
+                return concrete_to_bound[types.FunctionType](param_name, param_type)
+            return concrete_to_bound[param_type](param_name)
+        bound_args = [create_bound_arg(param_name) for param_name in param_names]
         ret = c_with_virt.virtualized.call_transformed(*bound_args)
         ret = concrete_to_abstract(ret)
+
+    # check that ret.C is the same as c_with_virt's return type
+    assert (
+        ret.C == c_with_virt.virtualized.get_return_type()
+    ), f"Function {c.__name__} was annotated with return type {c_with_virt.virtualized.get_return_type()}, but the actual return type is {ret.C}"
 
     name = c_with_virt.virtualized.get_function_name()
 
@@ -69,3 +81,21 @@ def function_C_to_A(
 
 
 concrete_to_abstract[types.FunctionType] = function_C_to_A
+
+
+def function_C_to_B(name: str, func_tp: typing.Callable) -> Function:
+    assert len(get_args(func_tp)) == 2, f"The type annotation {func_tp} is not valid"
+    func_args_tp, func_ret_tp = get_args(func_tp)
+    # TODO: still need to handle the case where func_ret_tp is yet another Callable (i.e. we have a function that returns a function)
+    if func_ret_tp is None:
+        return Function[Null]().bound(name)
+    elif func_ret_tp is bool:
+        return Function[Boolean]().bound(name)
+    elif func_ret_tp is int:
+        return Function[Integer]().bound(name)
+    else:
+        raise ValueError(f"The return type {func_ret_tp} is not supported")
+
+
+
+concrete_to_bound[types.FunctionType] = function_C_to_B

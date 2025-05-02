@@ -6,7 +6,7 @@ from argon.types.null import Null
 from argon.virtualization.type_mapper import concrete_to_abstract
 
 
-def func(x):
+def func(x: int) -> int:
     return x
 
 
@@ -29,6 +29,6 @@ def test_c_to_a():
         assert c1.A is Null
 
         d = func
-        d1 = concrete_to_abstract.function(d, [concrete_to_abstract(3)])
+        d1 = concrete_to_abstract(d)
         assert d1.RETURN_TP is Integer
     print(state)

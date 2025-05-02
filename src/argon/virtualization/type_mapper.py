@@ -1,4 +1,3 @@
-import types
 import typing
 from argon.ref import Ref
 
@@ -12,15 +11,6 @@ class _CToA:
     def __setitem__(self, tp_c, tp_a_initializer: typing.Callable) -> None:
         self.C_to_A_map[tp_c] = tp_a_initializer
 
-    def function(self, c, args: typing.List[Ref[typing.Any, typing.Any]]) -> "Function":
-        # Unwrap the function if it's decorated
-        while hasattr(c, "__wrapped__"):
-            c = c.__wrapped__
-
-        if not isinstance(c, types.FunctionType):
-            raise ValueError(f"Expected function, got {c}")
-        return self.C_to_A_map[types.FunctionType](c, args)
-
     def __call__(self, c) -> Ref[typing.Any, typing.Any]:
         if type(c) in self.C_to_A_map:
             return self.C_to_A_map[type(c)](c)
@@ -32,8 +22,6 @@ class _CToA:
 
 concrete_to_abstract = _CToA()
 
-from argon.types.function import Function
-
 # This class is used to map a concrete type to a bound variable
 # of its corresponding abstract type
 class _CToB:
@@ -43,9 +31,10 @@ class _CToB:
     def __setitem__(self, tp_c, tp_b_initializer: typing.Callable) -> None:
         self.C_to_B_map[tp_c] = tp_b_initializer
     
-    def __call__(self, tp_c, name: str) -> Ref[typing.Any, typing.Any]:
+    # TODO: make the return type more specific
+    def __getitem__(self, tp_c) -> typing.Callable:
         if tp_c in self.C_to_B_map:
-            return self.C_to_B_map[tp_c](name)
+            return self.C_to_B_map[tp_c]
         else:
             raise ValueError(f"Cannot convert {tp_c} to bound variable")
 
