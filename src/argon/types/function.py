@@ -37,6 +37,18 @@ class Function[RETURN_TP](Ref[FunctionWithVirt, "Function[RETURN_TP]"]):
     def RETURN_TP(self) -> typing.Type[RETURN_TP]:
         raise NotImplementedError()
 
+    @override
+    @property
+    def tp_name(self) -> str:
+        result = f"{self.type_name()}[{self.RETURN_TP.type_name()}"
+        current_type = self.RETURN_TP
+        while get_args(current_type):
+            args = get_args(current_type)
+            result += f"[{args[0].type_name()}"
+            current_type = args[0]
+        result += "]" * (result.count("[") - result.count("]"))
+        return result
+
 
 def function_C_to_A(c: types.FunctionType) -> Function:
     if not (hasattr(c, "virtualized") and isinstance(c.virtualized, ArgonFunction)):  # type: ignore -- Pyright complains about accessing virtualized
@@ -95,7 +107,6 @@ def function_C_to_B(name: str, func_tp: typing.Callable) -> Function:
         return Function[Integer]().bound(name)
     else:
         raise ValueError(f"The return type {func_ret_tp} is not supported")
-
 
 
 concrete_to_bound[types.FunctionType] = function_C_to_B
