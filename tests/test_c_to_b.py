@@ -1,5 +1,4 @@
 from types import NoneType
-import types
 import typing
 from argon.state import State
 from argon.types.boolean import Boolean
@@ -32,7 +31,7 @@ def test_c_to_b():
         except TypeError as e:
             assert str(e) == "Cannot bind NoneType"
         
-        d = concrete_to_bound[types.FunctionType]("d", typing.Callable[[int, int], int])
+        d = concrete_to_bound[typing.Callable[[int, int], int]]("d")
         assert d.C is FunctionWithVirt
         assert d.A is Function[Integer]
         assert d.is_bound()

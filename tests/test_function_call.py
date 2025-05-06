@@ -3,12 +3,16 @@ from argon.state import State
 from argon.virtualization.wrapper import argon_function
 
 
-def func2(x: int, y: int) -> int:
+def func3(x: int, y: int) -> int:
     return x + y
 
 
-def func1(func: typing.Callable[[int, int], int], x: int, y: int, z: int) -> int:
-    return func(x, y) + z
+def func2() -> typing.Callable[[int, int], int]:
+    return func3
+
+
+def func1(func: typing.Callable[[], typing.Callable[[int, int], int]], x: int, y: int, z: int) -> int:
+    return func()(x, y) + z
 
 
 @argon_function()
