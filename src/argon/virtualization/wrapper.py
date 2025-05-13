@@ -38,7 +38,9 @@ def argon_function(calls=True, ifs=True, if_exps=True, loops=True):
         # Get type hints of the function
         type_hints = typing.get_type_hints(func)
         if "return" not in type_hints:
-            raise TypeError(f"Function {func.__name__} must have a return type annotation")
+            raise TypeError(
+                f"Function {func.__name__} must have a return type annotation"
+            )
         for param_name, param in inspect.signature(func).parameters.items():
             if param.annotation == inspect.Parameter.empty:
                 raise TypeError(
@@ -99,7 +101,11 @@ def argon_function(calls=True, ifs=True, if_exps=True, loops=True):
 
         # Replace the original function with the transformed version
         virtualized_func = ArgonFunction(
-            func, functools.update_wrapper(func_globals[func.__name__], func), return_type, param_types
+            func,
+            functools.update_wrapper(func_globals[func.__name__], func),
+            return_type,
+            param_types,
+            abstract_func=None,
         )
 
         # Create a wrapper function that calls the transformed function

@@ -3,6 +3,9 @@ import dis
 import types
 from typing import get_args, override, Protocol
 import typing
+import inspect
+
+import pydantic
 from argon.block import Block
 from argon.ref import Ref
 from argon.srcctx import SrcCtx
@@ -55,11 +58,39 @@ def function_C_to_A(c: types.FunctionType) -> Function:
         from argon.virtualization.wrapper import argon_function
 
         c_with_virt = argon_function()(c)
+        # Update the original function in its module's namespace
+        module = inspect.getmodule(c)
+        if module is not None:
+            setattr(module, c.__name__, c_with_virt)
     else:
         c_with_virt = typing.cast(FunctionWithVirt, c)
 
+    if c_with_virt.virtualized.abstract_func is not None:
+        return c_with_virt.virtualized.abstract_func
+
+    annotated_concrete_return_type = c_with_virt.virtualized.get_return_type()
+    annotated_abstract_return_type = concrete_to_abstract_type[
+        annotated_concrete_return_type
+    ]
+    name = c_with_virt.virtualized.get_function_name()
+    body = Block[annotated_abstract_return_type]([], [], None)
+
+    from argon.node.function_new import FunctionNew
+
+    c_with_virt.virtualized.abstract_func = stage(
+        FunctionNew[Function[annotated_abstract_return_type]](
+            name,
+            [],
+            body,
+            c_with_virt,
+        ),
+        ctx=SrcCtx(
+            c.__code__.co_filename,
+            dis.Positions(lineno=c.__code__.co_firstlineno, col_offset=0),
+        ),
+    )
+
     # get the return type of a function by actually calling it
-    # TODO: add some check to see if we've already run it with args of the same type
     param_names = c_with_virt.virtualized.get_param_names()
     scope_context = State.get_current_state().new_scope()
     with scope_context:
@@ -72,22 +103,18 @@ def function_C_to_A(c: types.FunctionType) -> Function:
 
     # check that ret.C is the same as c_with_virt's return type
     assert (
-        ret.A == concrete_to_abstract_type[c_with_virt.virtualized.get_return_type()]
-    ), f"Function {c.__name__} was annotated with return type {c_with_virt.virtualized.get_return_type()}, but the actual return type is {ret.C}"
+        ret.A == annotated_abstract_return_type
+    ), f"Function {c.__name__} was annotated with return type {annotated_concrete_return_type}, but the actual return type is {ret.C}"
 
     name = c_with_virt.virtualized.get_function_name()
 
-    body = Block[ret.A](scope_context.scope.inputs, scope_context.scope.symbols, ret)
+    body.inputs = scope_context.scope.inputs
+    body.stms = scope_context.scope.symbols
+    body.result = ret
 
-    from argon.node.function_new import FunctionNew
-
-    return stage(
-        FunctionNew[Function[ret.A]](name, bound_args, body, c_with_virt),
-        ctx=SrcCtx(
-            c.__code__.co_filename,
-            dis.Positions(lineno=c.__code__.co_firstlineno, col_offset=0),
-        ),
-    )
+    c_with_virt.virtualized.abstract_func.rhs.val.underlying.binds = bound_args
+  
+    return c_with_virt.virtualized.abstract_func
 
 
 concrete_to_abstract[types.FunctionType] = function_C_to_A
@@ -103,3 +130,5 @@ def function_C_to_AT(func_tp: typing.Callable) -> typing.Type[Function]:
 
 
 concrete_to_abstract_type[types.FunctionType] = function_C_to_AT
+
+pydantic.dataclasses.rebuild_dataclass(ArgonFunction)

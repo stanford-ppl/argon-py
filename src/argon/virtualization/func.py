@@ -1,4 +1,3 @@
-import inspect
 import typing
 import pydantic
 from pydantic.dataclasses import dataclass
@@ -12,6 +11,7 @@ class ArgonFunction:
     transformed_func: typing.Callable
     return_type: typing.Type | typing.Callable
     param_types: typing.Dict[str, typing.Type | typing.Callable]
+    abstract_func: typing.Optional["Function"]
 
     @property
     def argon(self):

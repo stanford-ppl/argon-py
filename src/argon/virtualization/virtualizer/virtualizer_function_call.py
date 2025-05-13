@@ -19,8 +19,8 @@ def stage_function_call(
     if func in white_list:
         return func(*args)
 
-    abstract_args = [concrete_to_abstract(arg) for arg in args]
     abstract_func = concrete_to_abstract(func)
+    abstract_args = [concrete_to_abstract(arg) for arg in args]
     # TODO: check if arg types match the function signature
     return stage(
         FunctionCall[abstract_func.RETURN_TP](abstract_func, abstract_args),
