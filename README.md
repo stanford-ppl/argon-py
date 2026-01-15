@@ -46,7 +46,7 @@ class Boolean(Ref[bool, "Boolean"]):
 This defines a new `Boolean` type, whose concrete type is the python `bool`. Python dunder methods are used to capture operations such as `x & y`, which are then staged into the scope.
 
 # Installation
-Argon-py requires Python 3.12 or later, as it uses several features introduced in the 3.12 release.
+Argon-py requires Python 3.12.3, as it uses several features introduced in the 3.12 release.
 
 1. In the root directory, run:
 
