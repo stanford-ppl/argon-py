@@ -4,7 +4,7 @@ from collections import namedtuple
 
 
 @argon_function(calls=False, ifs=False)
-def if_exps():
+def if_exps() -> None:
     a = True
     b = False
     c = True
@@ -25,12 +25,12 @@ def test_if_exps():
     print(state)
 
 
-def my_func(x, y):
+def my_func(x: int, y: int) -> int:
     return x + y
 
 
 @argon_function(if_exps=False)
-def ifs():
+def ifs() -> None:
     a = True
     b = False
     c = True
@@ -66,7 +66,7 @@ def test_ifs():
 
 
 @argon_function()
-def loops():
+def loops() -> None:
     a = 1
     b = 2
     c = 3

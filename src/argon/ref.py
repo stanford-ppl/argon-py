@@ -19,6 +19,10 @@ class ExpType[C, A](ArgonMeta, abc.ABC):
     type A. This class should be subclassed to define custom expression types.
     """
 
+    @classmethod
+    def type_name(cls) -> str:
+        return cls.__name__
+
     @abc.abstractmethod
     def fresh(self) -> A:
         raise NotImplementedError()
@@ -58,7 +62,7 @@ class ExpType[C, A](ArgonMeta, abc.ABC):
 
     @property
     def tp_name(self) -> str:
-        return self.__class__.__name__
+        return self.type_name()
 
 
 @dataclass
