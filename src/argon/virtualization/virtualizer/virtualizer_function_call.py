@@ -8,6 +8,7 @@ from argon.srcctx import SrcCtx
 from argon.state import stage
 from argon.virtualization.virtualizer.virtualizer_base import TransformerBase
 from argon.virtualization.type_mapper import concrete_to_abstract
+from argon.types.function import Function
 
 
 def stage_function_call(
@@ -21,20 +22,30 @@ def stage_function_call(
 
     abstract_func = concrete_to_abstract(func)
     abstract_args = [concrete_to_abstract(arg) for arg in args]
-    # TODO: check if arg types match the function signature
-    return stage(
-        FunctionCall[abstract_func.RETURN_TP](abstract_func, abstract_args),
-        ctx=SrcCtx.new(2),
-    )
+
+    func_type_origin = typing.get_origin(abstract_func.A) or abstract_func.A
+    if func_type_origin is Function:
+        return stage(
+            FunctionCall[abstract_func.RETURN_TP](abstract_func, abstract_args),
+            ctx=SrcCtx.new(2),
+        )
+    else:
+        return abstract_func(*abstract_args)
 
 
 class TransformerFunctionCall(TransformerBase):
     # This method is called for function calls
     def visit_Call(self, node):
+        node.func = self.visit(node.func)
+
         # Recursively visit arguments
         prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
         self.concrete_to_abstract_flag = False
-        self.generic_visit(node)
+        # self.generic_visit(node)
+        for arg in node.args:
+            self.visit(arg)
+        for keyword in node.keywords:
+            self.visit(keyword)
         self.concrete_to_abstract_flag = prev_concrete_to_abstract_flag
 
         # Do not stage the function call if the flag is set to False
