@@ -22,28 +22,6 @@ from collections import namedtuple
 from argon.virtualization.type_mapper import concrete_to_abstract
 
 
-class TwoLayerQwen3MLP(nn.Module):
-    """
-    A custom module that runs two consecutive Qwen3MoeMLP layers.
-
-    This mimics how transformer models use for loops to express
-    a stack of decoder layers.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.layers = nn.ModuleList([Qwen3MoeMLP(config) for _ in range(2)])
-
-    def forward(
-        self: nn.Module, hidden_states: torch.Tensor, layers: nn.ModuleList
-    ) -> torch.Tensor:
-        i = 0
-        while i < 2:
-            hidden_states = layers[i](hidden_states)
-            i = i + 1
-        return hidden_states
-
-
 @argon_function()
 def multilayer_forward_full(
     hidden_states: torch.Tensor, layers: nn.ModuleList
@@ -77,3 +55,46 @@ def test_loops_in_function_full():
 
     print(f"\ntest_loops")
     print(state)
+
+
+class TwoLayerQwen3MLP(nn.Module):
+    """
+    A custom module that runs two consecutive Qwen3MoeMLP layers.
+
+    This mimics how transformer models use for loops to express
+    a stack of decoder layers.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.layers = nn.ModuleList([Qwen3MoeMLP(config) for _ in range(2)])
+
+    # @argon_function()
+    def forward(self: nn.Module, hidden_states: torch.Tensor) -> torch.Tensor:
+        layers = self.layers
+        i = 0
+        while i < 2:
+            hidden_states = layers[i](hidden_states)
+            i = i + 1
+        return hidden_states
+
+
+# def test_loops_in_class():
+#     model_name = "Qwen/Qwen3-30B-A3B-Instruct-2507"
+
+#     # We use the config to load the model to avoid downloading the large weights
+#     config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
+#     model = TwoLayerQwen3MLP(config)
+#     model.eval()
+
+#     # Prepare dummy inputs matching input shape
+#     batch_size, seq_length, hidden_size = 1, 8, config.hidden_size
+#     dummy_input = torch.randn(batch_size, seq_length, hidden_size)
+
+#     torch._dynamo.mark_dynamic(dummy_input, 0)
+
+#     state = State()
+#     with state:
+#         result = model.forward.virtualized.call_transformed(dummy_input, model.layers)
+
+#     print(state)
