@@ -91,8 +91,6 @@ def argon_function(calls=True, ifs=True, if_exps=True, loops=True):
         # Create a new AST containing only the transformed function
         transformed_module = ast.Module(body=[transformed], type_ignores=[])
 
-        print(ast.unparse(transformed_module))
-
         # Compile the transformed AST
         compiled = compile(
             transformed_module, filename=func.__code__.co_filename, mode="exec"

@@ -4,7 +4,7 @@ from pydantic.dataclasses import dataclass
 
 from argon.op import Op
 from argon.ref import Exp
-from argon.types.torch import NNModule
+from argon.types.custom_types.torch import NNModule
 
 
 @dataclass(config=pydantic.ConfigDict(arbitrary_types_allowed=True))

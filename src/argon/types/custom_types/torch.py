@@ -55,7 +55,7 @@ class NNModuleList(Ref[nn.ModuleList, "NNModuleList"]):
         So the full information (which layer + what input) is preserved in
         the operation graph.
         """
-        from argon.node.index_ops import Index
+        from argon.node.custom_nodes.index_ops import Index
 
         # Option 1: Return Index[NNModule]
         return stage(Index[NNModule](self, index), ctx=SrcCtx.new(2))
@@ -79,7 +79,7 @@ class NNModule(Ref[nn.Module, "NNModule"]):
         return NNModule()
 
     def __call__(self, *input) -> TorchTensor:
-        from argon.node.module_call import NNModuleCall
+        from argon.node.custom_nodes.module_call import NNModuleCall
 
         return stage(NNModuleCall[TorchTensor](self, list(input)), ctx=SrcCtx.new(2))
 

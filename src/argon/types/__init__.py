@@ -3,4 +3,4 @@ import argon.types.function
 import argon.types.integer
 import argon.types.null
 import argon.types.struct
-import argon.types.torch
+import argon.types.custom_types.torch
