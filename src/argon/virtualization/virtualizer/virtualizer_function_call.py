@@ -1,4 +1,5 @@
 import ast
+import copy
 import types
 import typing
 
@@ -11,15 +12,17 @@ from argon.virtualization.type_mapper import concrete_to_abstract
 from argon.types.function import Function
 
 
+def white_list(func: typing.Any) -> bool:
+    """Check if a function is whitelisted for direct execution (not staged)."""
+    whitelisted_functions = [
+        print,
+    ]  # TODO: Add more whitelisted functions here that we don't want to stage
+    return func in whitelisted_functions
+
+
 def stage_function_call(
     func: typing.Any, args: typing.List[typing.Any]
 ) -> Ref[typing.Any, typing.Any]:
-    white_list = [
-        print
-    ]  # TODO: Add more whitelisted functions here that we don't want to stage
-    if func in white_list:
-        return func(*args)
-
     abstract_func = concrete_to_abstract(func)
     abstract_args = [concrete_to_abstract(arg) for arg in args]
 
@@ -39,6 +42,10 @@ def stage_function_call(
 class TransformerFunctionCall(TransformerBase):
     # This method is called for function calls
     def visit_Call(self, node):
+        original_node_func = copy.deepcopy(node.func)
+        original_node_args = copy.deepcopy(node.args)
+        original_node_keywords = copy.deepcopy(node.keywords)
+
         # Recursively visit arguments
         prev_concrete_to_abstract_flag = self.concrete_to_abstract_flag
         self.concrete_to_abstract_flag = self.calls
@@ -51,6 +58,40 @@ class TransformerFunctionCall(TransformerBase):
                 return node
             else:
                 return self.concrete_to_abstract(node)
+
+        # Create the normal function call (for whitelisted functions)
+        normal_call = ast.Call(
+            func=original_node_func,
+            args=original_node_args,
+            keywords=original_node_keywords,
+        )
+
+        # Create a whitelist check call
+        whitelist_check = ast.Call(
+            func=ast.Attribute(
+                value=ast.Attribute(
+                    value=ast.Attribute(
+                        value=ast.Attribute(
+                            value=ast.Attribute(
+                                value=ast.Name(id="__________argon", ctx=ast.Load()),
+                                attr="argon",
+                                ctx=ast.Load(),
+                            ),
+                            attr="virtualization",
+                            ctx=ast.Load(),
+                        ),
+                        attr="virtualizer",
+                        ctx=ast.Load(),
+                    ),
+                    attr="virtualizer_function_call",
+                    ctx=ast.Load(),
+                ),
+                attr="white_list",
+                ctx=ast.Load(),
+            ),
+            args=[original_node_func],
+            keywords=[],
+        )
 
         # Wrap arguments in a list
         args_list = ast.List(elts=node.args, ctx=ast.Load())
@@ -82,7 +123,19 @@ class TransformerFunctionCall(TransformerBase):
             keywords=[],
         )
 
-        # Attach source location (line numbers and column offsets)
-        ast.copy_location(staged_call, node)
+        # Create an if expression: whitelist_check(func) ? normal_call : staged_call
+        final_call = ast.IfExp(
+            test=whitelist_check,
+            body=normal_call,
+            orelse=staged_call,
+        )
 
-        return staged_call
+        # Attach source location (line numbers and column offsets)
+        ast.copy_location(final_call, node)
+
+        # TODO: Temporary fix, assuming that potential whitelisted functions are always simple names (e.g. print)
+        if isinstance(original_node_func, ast.Name):
+            return final_call
+        else:
+            ast.copy_location(staged_call, node)
+            return staged_call
