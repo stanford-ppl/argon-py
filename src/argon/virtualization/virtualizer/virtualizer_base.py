@@ -96,20 +96,6 @@ class TransformerBase(ast.NodeTransformer):
             return self.concrete_to_abstract(node)
         return node
 
-    def visit_Subscript(self, node):
-        """
-        Handle subscript operations like layers[i] or list[0].
-
-        Recursively visits the value and slice, which will convert them to
-        abstract types if concrete_to_abstract_flag is True. This allows
-        subscript operations to work with abstract types like NNModuleList.
-        """
-        # Recursively visit the value (e.g., 'layers') and slice (e.g., 'i')
-        # This will convert them to abstract types if the flag is set
-        node.value = self.visit(node.value)
-        node.slice = self.visit(node.slice)
-        return node
-
     def visit_Assign(self, node):
         # Visit RHS of assignment
         node.value = self.visit(node.value)
