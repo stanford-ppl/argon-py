@@ -59,29 +59,58 @@ def argon_function(calls=True, ifs=True, if_exps=True, loops=True):
 
         # Remove the decorators from the AST, because the modified function will
         # be passed to them anyway and we don't want them to be called twice.
-        func_src = None
-        for node in parsed.body:
-            if isinstance(node, ast.FunctionDef) and node.name == func.__name__:
-                node.decorator_list = [
-                    dec
-                    for dec in node.decorator_list
-                    if not (
-                        (
-                            isinstance(dec, ast.Call)
-                            and isinstance(dec.func, ast.Name)
-                            and dec.func.id == "argon_function"
-                        )
+
+        # Use qualified name to find the function (handles class methods)
+        # e.g., "MyClass.my_method" or just "my_function"
+        qualname_parts = func.__qualname__.split(".")
+
+        def find_function_in_ast(nodes, qualname_parts):
+            """Recursively search for a function in the AST using qualified name parts."""
+            if len(qualname_parts) == 0:
+                return None
+
+            if len(qualname_parts) == 1:
+                # Looking for a top-level function
+                for node in nodes:
+                    if (
+                        isinstance(node, ast.FunctionDef)
+                        and node.name == qualname_parts[0]
+                    ):
+                        return node
+            else:
+                # Looking for a method inside a class (or nested structure)
+                class_name = qualname_parts[0]
+                remaining_parts = qualname_parts[1:]
+
+                for node in nodes:
+                    if isinstance(node, ast.ClassDef) and node.name == class_name:
+                        # Recursively search within the class body
+                        return find_function_in_ast(node.body, remaining_parts)
+
+            return None
+
+        func_src = find_function_in_ast(parsed.body, qualname_parts)
+
+        if func_src is not None:
+            # Remove argon_function decorators
+            func_src.decorator_list = [
+                dec
+                for dec in func_src.decorator_list
+                if not (
+                    (
+                        isinstance(dec, ast.Call)
+                        and isinstance(dec.func, ast.Name)
+                        and dec.func.id == "argon_function"
                     )
-                ]
-                node.args.kw_defaults.append(ast.Constant(value=None))
-                node.args.kwonlyargs.append(
-                    ast.arg(arg="__________argon", annotation=None)
                 )
-                func_src = node
-                break
+            ]
+            func_src.args.kw_defaults.append(ast.Constant(value=None))
+            func_src.args.kwonlyargs.append(
+                ast.arg(arg="__________argon", annotation=None)
+            )
 
         if func_src is None:
-            raise ValueError(f"Unable to virtualize {func.__name__} in file {src}")
+            raise ValueError(f"Unable to virtualize {func.__qualname__} in file {src}")
 
         # Apply the AST transformation
         # TODO: Add the transformation flags here too!
@@ -115,6 +144,22 @@ def argon_function(calls=True, ifs=True, if_exps=True, loops=True):
 
         wrapper.virtualized = virtualized_func  # type: ignore -- we need to add this flag to mark the function as virtualized
 
-        return typing.cast(FunctionWithVirt, functools.update_wrapper(wrapper, func))
+        # If this is a method, we need to create a descriptor that binds the instance to the virtualized function when accessed
+        if "." in func.__qualname__:
+            # For methods, create a minimal descriptor class
+            # https://docs.python.org/3/reference/datamodel.html#implementing-descriptors
+            class MethodDescriptor:
+                def __get__(self, instance, owner=None):
+                    virtualized_func.bind(instance)
+                    return wrapper
+
+            descriptor = MethodDescriptor()
+            functools.update_wrapper(descriptor, func)
+            descriptor.virtualized = virtualized_func
+            return typing.cast(FunctionWithVirt, descriptor)
+        else:
+            return typing.cast(
+                FunctionWithVirt, functools.update_wrapper(wrapper, func)
+            )
 
     return decorator

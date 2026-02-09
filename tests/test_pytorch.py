@@ -69,7 +69,7 @@ class TwoLayerQwen3MLP(nn.Module):
         super().__init__()
         self.layers = nn.ModuleList([Qwen3MoeMLP(config) for _ in range(2)])
 
-    # @argon_function()
+    @argon_function()
     def forward(self: nn.Module, hidden_states: torch.Tensor) -> torch.Tensor:
         layers = self.layers
         i = 0
@@ -79,22 +79,22 @@ class TwoLayerQwen3MLP(nn.Module):
         return hidden_states
 
 
-# def test_loops_in_class():
-#     model_name = "Qwen/Qwen3-30B-A3B-Instruct-2507"
+def test_loops_in_class():
+    model_name = "Qwen/Qwen3-30B-A3B-Instruct-2507"
 
-#     # We use the config to load the model to avoid downloading the large weights
-#     config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
-#     model = TwoLayerQwen3MLP(config)
-#     model.eval()
+    # We use the config to load the model to avoid downloading the large weights
+    config = AutoConfig.from_pretrained(model_name, trust_remote_code=True)
+    model = TwoLayerQwen3MLP(config)
+    model.eval()
 
-#     # Prepare dummy inputs matching input shape
-#     batch_size, seq_length, hidden_size = 1, 8, config.hidden_size
-#     dummy_input = torch.randn(batch_size, seq_length, hidden_size)
+    # Prepare dummy inputs matching input shape
+    batch_size, seq_length, hidden_size = 1, 8, config.hidden_size
+    hidden_states = torch.randn(batch_size, seq_length, hidden_size)
 
-#     torch._dynamo.mark_dynamic(dummy_input, 0)
+    torch._dynamo.mark_dynamic(hidden_states, 0)
 
-#     state = State()
-#     with state:
-#         result = model.forward.virtualized.call_transformed(dummy_input, model.layers)
+    state = State()
+    with state:
+        result = model.forward.virtualized.call_transformed(hidden_states)
 
-#     print(state)
+    print(state)

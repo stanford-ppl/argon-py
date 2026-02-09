@@ -12,15 +12,20 @@ class ArgonFunction:
     return_type: typing.Type | typing.Callable
     param_types: typing.Dict[str, typing.Type | typing.Callable]
     abstract_func: typing.Optional["Function"]
+    bound_instance: typing.Any = None  # If set, this is a bound method
 
     @property
     def argon(self):
         return argon
 
     def call_original(self, *args, **kwargs):
+        if self.bound_instance is not None:
+            return self.original_func(self.bound_instance, *args, **kwargs)
         return self.original_func(*args, **kwargs)
 
     def call_transformed(self, *args, **kwargs):
+        if self.bound_instance is not None:
+            return self.transformed_func(self.bound_instance, *args, **kwargs, __________argon=self)
         return self.transformed_func(*args, **kwargs, __________argon=self)
 
     get_function_name = lambda self: self.original_func.__name__
@@ -33,3 +38,7 @@ class ArgonFunction:
 
     def get_return_type(self) -> typing.Type | typing.Callable:
         return self.return_type
+
+    def bind(self, instance) -> None:
+        """Bind this ArgonFunction to the given instance and return self."""
+        self.bound_instance = instance
