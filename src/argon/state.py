@@ -36,9 +36,7 @@ class State:
         ctx = ctx or SrcCtx.new(2)
         return self.register(op, lambda: self._symbol(op.R, op, ctx), lambda sym: None)  # type: ignore
 
-    def register[
-        R
-    ](
+    def register[R](
         self,
         op: Op[R],
         symbol: typing.Callable[[], R],
@@ -103,6 +101,8 @@ class Scope:
 
     @property
     def inputs(self) -> typing.List[Exp[typing.Any, typing.Any]]:
+        from argon.node.phi import Phi
+
         # We only want to consider symbols that have inputs in their rhs (i.e. Nodes)
         # We also want to exclude Phi nodes from the list of inputs
         node_symbols = [
@@ -173,5 +173,3 @@ def stage[A](op: Op[A], ctx: SrcCtx | None = None) -> A:
     state = State.get_current_state()
     ctx = ctx or SrcCtx.new(2)
     return state.stage(op, ctx)
-
-from argon.node.phi import Phi
